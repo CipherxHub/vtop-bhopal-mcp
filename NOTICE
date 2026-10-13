@@ -7,25 +7,65 @@ This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 Attribution
 --------------------------------------------------------------------------------
 
-This project was developed with reference to, and derives code from, the
-following earlier works, which are licensed under the MIT License:
+This project incorporates and adapts code from the following earlier works.
 
-  VtopMCP — https://github.com/Vikranth-jagdish/VtopMCP
-  Copyright (c) 2026 Vikranth Jagdish
+1. VtopMCP - https://github.com/Vikranth-jagdish/VtopMCP
+   Copyright (c) 2026 Vikranth Jagdish
+   Licensed under the MIT License.
 
-  vtop-bhopal-mcp — https://github.com/divyarthjain/vtop-bhopal-mcp
-  Copyright (c) 2026 divyarthjain contributors
+   Approximately 40% of the source in this repository derives from this project,
+   including nine files retained byte-for-byte (the HTTP connector, the session
+   store, TLS trust-store merging, AES-256-GCM connector tokens, the attendance
+   projection calculators and the calendar and curriculum tools).
 
-  android-vtop-chennai — https://github.com/therealsujitk/android-vtop-chennai
-  Copyright (c) the android-vtop-chennai contributors
+   The MIT License requires that its copyright notice and permission notice be
+   included in all copies or substantial portions of the Software. That notice is
+   reproduced verbatim in LICENSE-MIT-upstream and continues to apply to those
+   portions. It names only its own copyright holder, as MIT requires: the
+   obligation runs per copyright holder over that holder's own code, and notices
+   are not merged.
 
-The MIT licence requires that its copyright and permission notices travel with
+2. vtop-bhopal-mcp - https://github.com/divyarthjain/vtop-bhopal-mcp
+   Copyright (c) 2026 vtop-bhopal-mcp contributors
+   Licensed under the Apache License, Version 2.0.
+
+   Approximately 247 lines across five files of Bhopal-specific parser
+   adaptations derive from this project. As required by section 4(d) of the
+   Apache License, 2.0, the attribution notices contained in that project's
+   NOTICE file are carried forward here.
+
+3. android-vtop-chennai - https://github.com/therealsujitk/android-vtop-chennai
+   Copyright (c) the android-vtop-chennai contributors
+   Licensed under the GNU General Public License, version 3.
+
+   This project is acknowledged as a behavioural reference: observation of how
+   that application communicates with VTOP informed the approach taken here.
+
+   No source code from that project is present in this repository. It is a
+   Java/Kotlin application and this project is written in TypeScript. What was
+   taken is factual: which endpoints exist, how the prelogin handshake is
+   sequenced, and the structure of the responses. Endpoint paths and protocol
+   sequences are facts about a remote system and are not copyrightable
+   expression.
+
+   Because the GNU General Public License is copyleft, had any code from that
+   project been incorporated, this repository could not be licensed under the
+   Apache License, Version 2.0. It is licensed under the Apache License, 2.0
+   because no such code was incorporated.
+
+--------------------------------------------------------------------------------
+
+The MIT license requires its copyright and permission notices to travel with
 substantial portions of the original code. The full MIT text is retained in
-LICENSE-MIT-upstream and continues to apply to those portions.
+LICENSE-MIT-upstream and applies to the portions derived from VtopMCP described
+above.
 
-This notice is provided for attribution and licence-compliance purposes. It
-does not imply endorsement by, or any affiliation with, the authors of the
-projects named above.
+This notice is provided for attribution and license-compliance purposes. It does
+not imply endorsement by, or any affiliation with, the authors of the projects
+named above.
+
+Measured provenance, including line counts and a script to reproduce them, is
+documented in docs/provenance.md.
 
 --------------------------------------------------------------------------------
 

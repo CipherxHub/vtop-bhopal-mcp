@@ -16,7 +16,10 @@
     "dist",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "docs",
+    "LICENSE",
+    "NOTICE",
+    "LICENSE-MIT-upstream"
   ],
   "engines": {
     "node": ">=20.6.0"

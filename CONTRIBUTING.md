@@ -1,5 +1,18 @@
 # Contributing
 
+## Documentation
+
+| | |
+|---|---|
+| [docs/development.md](docs/development.md) | Architecture, tests, how to add a tool |
+| [docs/bhopal-vtop.md](docs/bhopal-vtop.md) | How Bhopal's endpoints and markup actually behave |
+| [docs/tools.md](docs/tools.md) | The 23 tools and their schemas |
+| [docs/errors.md](docs/errors.md) | Error codes and recovery |
+| [docs/provenance.md](docs/provenance.md) | What came from where, with line counts |
+
+If you change a tool's arguments, update [docs/tools.md](docs/tools.md) in the
+same commit.
+
 ## Fixture hygiene — read this before adding a test
 
 **Test fixtures may mirror the real SHAPE of a VTOP response. They must never
