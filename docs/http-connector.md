@@ -1,6 +1,6 @@
 # HTTP connector
 
-`src/http.ts` serves the same 23 tools as the stdio server, but over
+`src/http.ts` serves the same 29 tools as the stdio server, but over
 **Streamable HTTP** so a remote MCP client can reach them. That is what makes
 the hosted and mobile options possible: Claude's connector model requires a
 server reachable over the internet, and a local stdio process cannot be.
@@ -23,7 +23,7 @@ Being precise about this, because it determines how much you should trust it.
 | Lifecycle | `/healthz`, `/`, `/robots.txt`, `/sitemap.xml`, `/og.svg` |
 | Auth | tokenless `GET` and `POST /mcp` → 401; garbage token → 401; `/register` → 503 without a secret |
 | Auth regression | `CONNECTOR_SECRET` + env credentials + no token → **401** |
-| Protocol | `initialize` → `mcp-session-id` → `tools/list` → 23 tools with correct `readOnlyHint` flags |
+| Protocol | `initialize` → `mcp-session-id` → `tools/list` → 29 tools with correct `readOnlyHint` flags |
 | Transport | response `Content-Type` is `application/json`, **not** `text/event-stream` |
 | CORS | an `Origin` header gets no `Access-Control-Allow-Origin` by default |
 | Landing page | client-neutral, no phantom npm install, never echoes the password |
@@ -36,7 +36,7 @@ local `dist/http.js` with a real account:
 |---|---|
 | `POST /register` | token minted; **password not echoed in the response** |
 | `initialize` | HTTP 200, `content-type: application/json`, `mcp-session-id` issued |
-| `tools/list` | 23 tools |
+| `tools/list` | 29 tools |
 | `session_status` | `credentialsSource: "connector"`, `serverValidated: true` |
 | `get_captcha` | image returned and read by the operator |
 | `login` | success |

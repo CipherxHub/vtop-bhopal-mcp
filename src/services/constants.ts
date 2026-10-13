@@ -14,6 +14,26 @@ export const ENDPOINTS = {
   gradeHistory: "examinations/examGradeView/StudentGradeHistory",
   semesterGrades: "examinations/examGradeView/doStudentGradeView",
   profile: "studentsRecord/StudentProfileAllView",
+  // Full-profile accordion sections (personal, educational, family, proctor,
+  // hostel) all come from the profile page itself; the acknowledgment
+  // checklist and the standalone proctor view are separate pages under the
+  // same studentsRecord/proctor areas.
+  acknowledgments: "admissions/AcknowledgmentView",
+  proctorDetails: "proctor/viewProctorDetails",
+  // Programme curriculum baskets (per-category course tables). The course rows
+  // carry a `bg-success` class when VTOP considers the course completed — read
+  // it, don't recompute it; cross-check against grade history instead.
+  curriculumBaskets: "academics/common/Curriculum",
+  // Fee receipts: getStudentReceipts lists (number/date/amount/campus);
+  // dupReceiptNewP2P renders one receipt's detail HTML. The detail call needs
+  // the receipt ref as printed on the VIEW button (`<no>/8/BPL`) plus the
+  // applno/registerNumber hidden fields from the list page.
+  feeReceipts: "finance/getStudentReceipts",
+  feeReceiptDetail: "finance/dupReceiptNewP2P",
+  // Full leave history (status + approved past records + gate-pass state).
+  // Unlike leave/1..4 this path takes the standard verifyMenu handshake, no
+  // leave/1 priming — the browser posts verifyMenu/authorizedID/_csrf here.
+  leaveHistory: "hostels/student/barcodeleave",
   timetableForSemesters: "academics/common/StudentTimeTable",
   // Academic calendar is a 3-step flow: load the page for context, fetch the
   // month buttons, then fetch each month's day table. The latter two are

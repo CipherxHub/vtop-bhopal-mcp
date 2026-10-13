@@ -6,6 +6,20 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Student info tools.** get_student_profile (all five profile sections),
+  get_acknowledgments (admission document checklist with what is still owed),
+  get_proctor_details (contact record, same data as the profile section).
+- **Curriculum baskets + pending subjects.** get_curriculum_baskets reports
+  every category with per-course credits and VTOP's own completion marking;
+  get_pending_subjects subtracts grade-history passes by course code only
+  (period labels are never compared) and surfaces marking disagreements in
+  `discrepancies` instead of resolving them.
+- **Fee receipts.** get_fee_receipts lists every payment with a total; pass
+  receiptNo back for that receipt's detail breakdown.
+- **Leave history.** get_leave_history carries the full record list including
+  approved past leaves, where get_leave_status keeps the current state.
+- **Calendar class groups.** get_calendar takes an optional classGroup
+  (COMB default, ALL/FS/FT and programme variants).
 - **Hostel leave tools.** get_leave_types, get_leave_status,
   pply_leave and the get_leave_type_rules diagnostic. Leave types are read
   from VTOP's live dropdown rather than hard-coded.

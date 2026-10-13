@@ -215,3 +215,130 @@ export const CAL_BHOPAL_HTML = `<table class="calendar-table">
   <td><span>17</span><span>Instructional Day - General</span><span>(Remote Learning - Class/CAM Activities Friday)</span><span>Instructional Day - General BArch</span><span>(Remote Learning - Class or CAM Activities)</span></td>
 </tr>
 </table>`;
+
+// Full-profile accordion page: five h2 sections, each a label/value table.
+// Shapes mirror studentsRecord/StudentProfileAllView; every value is invented.
+export const PROFILE_FULL_HTML = `
+<h2><button class="accordion-button">PERSONAL INFORMATION</button></h2>
+<div><table>
+<tr><td>STUDENT NAME</td><td>ADA LOVELACE</td></tr>
+<tr><td>DATE OF BIRTH</td><td>10-Dec-2004</td></tr>
+<tr><td>GENDER</td><td>FEMALE</td></tr>
+<tr><td>BLOOD GROUP</td><td>O+</td></tr>
+<tr><td>MOBILE NUMBER</td><td>9000000001</td></tr>
+<tr><td>EMAIL</td><td>ada@example.com</td></tr>
+</table></div>
+<h2><button class="accordion-button">EDUCATIONAL INFORMATION</button></h2>
+<div><table>
+<tr><td>APPLIED DEGREE</td><td>INTEGRATED PG</td></tr>
+<tr><td>BOARD / UNIVERSITY</td><td>FICTIONAL BOARD</td></tr>
+<tr><td>YEAR OF PASSING/ PASSED</td><td>2022</td></tr>
+</table></div>
+<h2><button class="accordion-button">FAMILY INFORMATION</button></h2>
+<div><table>
+<tr><td>FATHER NAME</td><td>CHARLES BABBAGE</td></tr>
+<tr><td>OCCUPATION</td><td>TEACHING RESEARCH</td></tr>
+</table></div>
+<h2><button class="accordion-button">PROCTOR INFORMATION</button></h2>
+<div><table>
+<tr><td>FACULTY ID</td><td>900001</td></tr>
+<tr><td>FACULTY NAME</td><td>GRACE HOPPER</td></tr>
+<tr><td>FACULTY DESIGNATION</td><td>Assistant Professor Grade 2</td></tr>
+<tr><td>SCHOOL</td><td>School of Testing</td></tr>
+<tr><td>FACULTY DEPARTMENT</td><td>TEST-Department</td></tr>
+<tr><td>CABIN</td><td>null</td></tr>
+<tr><td>FACULTY EMAIL</td><td>grace.hopper@example.com</td></tr>
+<tr><td>FACULTY INTERCOM</td><td></td></tr>
+<tr><td>FACULTY MOBILE NUMBER</td><td>9000000002</td></tr>
+</table></div>
+<h2><button class="accordion-button">HOSTEL INFORMATION</button></h2>
+<div><table>
+<tr><td>Block Name</td><td>FICTIONAL BLOCK A (BOYS HOSTEL - Block)</td></tr>
+<tr><td>Room No.</td><td>A101</td></tr>
+<tr><td>Bed Type</td><td>2- BED -NANF</td></tr>
+<tr><td>Mess Information</td><td>VEG - FOOD TEST</td></tr>
+</table></div>`;
+
+// Acknowledgment checklist: (Sl.No, document, status).
+export const ACK_HTML = `
+<table>
+<tr><td>Sl.No.</td><td>Document</td><td>Status</td></tr>
+<tr><td>1.</td><td>Mark List - HSC / +2</td><td>Submitted</td></tr>
+<tr><td>2.</td><td>Transfer Certificate (or) School leaving Certificate</td><td>Submitted</td></tr>
+<tr><td>3.</td><td>Hostel Affidavit</td><td>Not Submitted</td></tr>
+<tr><td>4.</td><td>Nativity Certificate (if applicable)</td><td>Not Applicable</td></tr>
+</table>`;
+
+// Standalone proctor page: same table shape as the profile proctor section.
+export const PROCTOR_PAGE_HTML = `
+<table>
+<tr><td>FACULTY ID</td><td>900001</td></tr>
+<tr><td>FACULTY NAME</td><td>GRACE HOPPER</td></tr>
+<tr><td>FACULTY DESIGNATION</td><td>Assistant Professor Grade 2</td></tr>
+<tr><td>SCHOOL</td><td>School of Testing</td></tr>
+<tr><td>FACULTY DEPARTMENT</td><td>TEST-Department</td></tr>
+<tr><td>CABIN</td><td>null</td></tr>
+<tr><td>FACULTY EMAIL</td><td>grace.hopper@example.com</td></tr>
+<tr><td>FACULTY INTERCOM</td><td></td></tr>
+<tr><td>FACULTY MOBILE NUMBER</td><td>9000000002</td></tr>
+</table>`;
+
+// Curriculum baskets: two categories; BTST101L passed (A, green), BTST202L
+// failed (F, not green), BTST303L never taken (not green), BTST404L green but
+// graded F (deliberate mismatch → must surface in discrepancies, not resolve).
+export const CURR_BASKETS_HTML = `
+<h3>Programme Core</h3>
+<table>
+<tr><td>Sl.No.</td><td>Course Code</td><td>Course Title</td><td>Course Type</td><td>Version</td><td>L</td><td>T</td><td>P</td><td>J</td><td>Credits</td></tr>
+<tr class="bg-success odd"><td>1</td><td>BTST101L</td><td>Database Systems</td><td>Theory Only</td><td>1.0</td><td>3</td><td>1</td><td>0</td><td>0</td><td>4.0</td></tr>
+<tr class="even"><td>2</td><td>BTST202L</td><td>Marketing</td><td>Theory Only</td><td>1.0</td><td>3</td><td>1</td><td>0</td><td>0</td><td>4.0</td></tr>
+<tr class="odd"><td>3</td><td>BTST303L</td><td>Networks</td><td>Theory Only</td><td>1.0</td><td>3</td><td>1</td><td>0</td><td>0</td><td>4.0</td></tr>
+<tr class="bg-success even"><td>4</td><td>BTST404L</td><td>Compilers</td><td>Theory Only</td><td>1.0</td><td>3</td><td>1</td><td>0</td><td>0</td><td>4.0</td></tr>
+</table>
+<h3>Programme Elective</h3>
+<table>
+<tr><td>Sl.No.</td><td>Course Code</td><td>Course Title</td><td>Course Type</td><td>Version</td><td>L</td><td>T</td><td>P</td><td>J</td><td>Credits</td></tr>
+<tr class="odd"><td>1</td><td>BTST505L</td><td>Robotics</td><td>Theory Only</td><td>1.0</td><td>3</td><td>0</td><td>0</td><td>0</td><td>3.0</td></tr>
+</table>`;
+
+// Grade history backing the baskets: BTST101L A (done), BTST202L F (not done),
+// BTST404L F (the mismatch: green on the page, failed on record).
+export const GRADES_FOR_PENDING_HTML = `
+<table>
+<tr><td>Oct-2025</td><td>1</td><td>BTST101L</td><td>Database Systems</td><td>Theory Only</td><td>A</td><td>4</td></tr>
+<tr><td>Oct-2025</td><td>2</td><td>BTST202L</td><td>Marketing</td><td>Theory Only</td><td>F</td><td>4</td></tr>
+<tr><td>Jan-2026</td><td>1</td><td>BTST404L</td><td>Compilers</td><td>Theory Only</td><td>F</td><td>4</td></tr>
+</table>
+<table>
+<tr><td>Credits Registered</td><td>Credits Earned</td><td>CGPA</td></tr>
+<tr><td>12</td><td>4</td><td>5.00</td></tr>
+</table>`;
+
+// Fee receipt list: three receipts; VIEW buttons carry doDuplicateReceipt refs.
+export const FEE_RECEIPTS_HTML = `
+<input type="hidden" name="applno" value="TESTAPPL001" />
+<input type="hidden" name="regno" value="21BCE1234" />
+<table>
+<tr><td>RECEIPT NUMBER</td><td>DATE</td><td>AMOUNT</td><td>CAMPUS CODE</td><td>VIEW</td></tr>
+<tr><td>11111</td><td>09-JUL-2026</td><td>6000.0</td><td>BHOPAL</td><td><button onclick="javascript:doDuplicateReceipt('11111/8/BPL');">view</button></td></tr>
+<tr><td>22222</td><td>03-JUL-2026</td><td>154080.0</td><td>BHOPAL</td><td><button onclick="javascript:doDuplicateReceipt('22222/8/BPL');">view</button></td></tr>
+<tr><td>33333</td><td>12-JUN-2026</td><td>97000.0</td><td>BHOPAL</td><td><button onclick="javascript:doDuplicateReceipt('33333/8/BPL');">view</button></td></tr>
+</table>`;
+
+// One receipt's detail panel, as rendered into the page.
+export const FEE_RECEIPT_DETAIL_HTML = `
+<table>
+<tr><td>Receipt Number</td><td>11111</td></tr>
+<tr><td>Receipt Date</td><td>09-JUL-2026</td></tr>
+<tr><td>Student Name</td><td>ADA LOVELACE</td></tr>
+<tr><td>Amount Paid</td><td>6000.0</td></tr>
+<tr><td>Payment Mode</td><td>ONLINE</td></tr>
+</table>`;
+
+// Leave history: two records with gate-pass icon cells (present vs absent).
+export const LEAVE_HISTORY_HTML = `
+<table>
+<tr><td>Leave Id</td><td>Visit Place</td><td>Reason</td><td>Leave Type</td><td>From</td><td>To</td><td>Status</td><td>Remarks</td><td>Gate Pass OUT</td><td>Gate Pass IN</td></tr>
+<tr><td>L9000001</td><td>Home</td><td>Diwali break at home.</td><td>WINTER VACATION</td><td>30-OCT-2026 17:00</td><td>15-NOV-2026 21:00</td><td>PROCTOR APPROVAL PENDING</td><td>REQUEST RAISED</td><td></td><td></td></tr>
+<tr><td>L9000002</td><td>Sehore</td><td>Medical check-up.</td><td>SPECIAL OUTING</td><td>07-OCT-2026 12:29</td><td>07-OCT-2026 18:30</td><td>REQUEST APPROVED</td><td>by [ 900001 ] [ GRACE HOPPER ]</td><td><i class="glyphicon"></i></td><td></td></tr>
+</table>`;
