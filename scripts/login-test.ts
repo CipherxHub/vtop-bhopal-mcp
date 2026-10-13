@@ -16,7 +16,13 @@ import { basename, isAbsolute, join as pathJoin } from "node:path";
 import { tmpdir } from "node:os";
 import * as os from "node:os";
 import * as path from "node:path";
-import { saveCaptchaFile, captchaDir } from "../src/services/captcha-file.js";
+import {
+  saveCaptchaFile,
+  captchaDir,
+  openCaptchaImage,
+  isCaptchaOpenEnabled,
+  captchaOpenCommand,
+} from "../src/services/captcha-file.js";
 import { VtopClient } from "../src/services/vtop-client.js";
 import { VtopError, classify, isNotAuthenticated, type VtopErrorCode } from "../src/services/errors.js";
 import { errorResult } from "../src/tools/_helpers.js";
@@ -137,6 +143,58 @@ async function main() {
       } finally {
         delete process.env.VTOP_CAPTCHA_DIR;
         rmSync(blocker, { force: true });
+      }
+    });
+
+    // --- optional viewer launch (VTOP_CAPTCHA_OPEN) -------------------------
+    // Codex renders no image blocks and its model will not open a local file to
+    // look at one, so on that client the round trip needs a human. This launches
+    // the viewer for them. It spawns a GUI process, so it is off unless the env
+    // var is exactly "1" - a shared HTTP connector would otherwise throw a window
+    // on whoever is sitting at the keyboard.
+    await check("captcha viewer launch is OFF unless VTOP_CAPTCHA_OPEN=1", () => {
+      delete process.env.VTOP_CAPTCHA_OPEN;
+      assert.equal(isCaptchaOpenEnabled(), false);
+      assert.equal(openCaptchaImage("C:\\anything.jpg"), false, "must not spawn when disabled");
+      process.env.VTOP_CAPTCHA_OPEN = "true";
+      assert.equal(
+        isCaptchaOpenEnabled(),
+        false,
+        "only the exact string '1' enables it, so a stray 'true' cannot",
+      );
+      delete process.env.VTOP_CAPTCHA_OPEN;
+    });
+    await check("viewer command is built per platform with no shell interpolation", () => {
+      assert.deepEqual(captchaOpenCommand("C:\\x\\c.jpg", "win32"), {
+        cmd: "cmd",
+        args: ["/c", "start", "", "C:\\x\\c.jpg"],
+      });
+      assert.deepEqual(captchaOpenCommand("/tmp/c.jpg", "darwin"), {
+        cmd: "open",
+        args: ["/tmp/c.jpg"],
+      });
+      assert.deepEqual(captchaOpenCommand("/tmp/c.jpg", "linux"), {
+        cmd: "xdg-open",
+        args: ["/tmp/c.jpg"],
+      });
+      assert.equal(captchaOpenCommand("/tmp/c.jpg", "aix" as NodeJS.Platform), null);
+      // The empty "" must be present: `start` takes it as the window title, and
+      // without it a quoted path gets opened as a title instead of launched.
+      const win = captchaOpenCommand("C:\\x\\c.jpg", "win32")!;
+      assert.equal(win.args[2], "", "win32 start needs an empty title slot");
+    });
+    await check("viewer launch refuses a file that is not there", () => {
+      // Guards against the launcher firing on a path that failed to write, and
+      // against the env var being set on a box with no desktop at all.
+      process.env.VTOP_CAPTCHA_OPEN = "1";
+      try {
+        assert.equal(
+          openCaptchaImage(path.join(os.tmpdir(), "definitely-not-here-12345.jpg")),
+          false,
+          "must not spawn a viewer for a missing file",
+        );
+      } finally {
+        delete process.env.VTOP_CAPTCHA_OPEN;
       }
     });
 
@@ -282,6 +340,34 @@ async function main() {
     await client.logout();
     assert.equal(client.isAuthenticated, false);
     assert.equal(client.registrationNumber, null);
+    await close();
+  });
+
+  // --- post-logout login is not broken -------------------------------------
+  // Verified live: after a real logout, GET /vtop/login carrying the dead
+  // JSESSIONID answers HTTP 404 instead of minting a fresh session, so a
+  // client that kept its cookie jar broke every later login with UPSTREAM 404
+  // until the process restarted. The mock reproduces that (dead sessions 404
+  // /login and /prelogin/setup), so without the jar reset in logout() and
+  // initSession() this test fails exactly the way production did.
+  await check("a fresh captcha works immediately after logout", async () => {
+    const { mock, client, close } = await loggedInClient();
+    await client.logout();
+    const img = await client.getCaptcha();
+    assert.match(img, /^data:image\/png;base64,[A-Za-z0-9+/=]+$/);
+    assert.ok(
+      mock.log.some((l) => l === "GET /vtop/login"),
+      "expected a fresh prelogin handshake after logout",
+    );
+    await close();
+  });
+  await check("a full login works immediately after logout", async () => {
+    const { client, close } = await loggedInClient();
+    await client.logout();
+    await client.getCaptcha();
+    await client.login(TEST_USER, TEST_PASS, TEST_CAPTCHA);
+    assert.equal(client.isAuthenticated, true);
+    assert.equal(client.registrationNumber, TEST_REGNO);
     await close();
   });
 

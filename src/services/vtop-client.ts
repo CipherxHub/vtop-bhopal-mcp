@@ -373,9 +373,19 @@ export class VtopClient {
    * cookies, then POST /prelogin/setup?flag=VTOP to receive the student
    * login HTML (which embeds the captcha image).
    */
-  private async initSession(client: AxiosInstance): Promise<string> {
+  private async initSession(viaProxy: boolean): Promise<string> {
     this.authenticated = false;
     this.authorizedID = null;
+
+    // Start the prelogin with no cookies. A jar holding a dead JSESSIONID —
+    // from a logout, or from a persisted session VTOP has since expired —
+    // makes VTOP answer the GET /login below with HTTP 404 instead of minting
+    // a fresh session (verified live). There is nothing worth keeping: the
+    // arming cookies are minted by the two requests below, and login() reuses
+    // this same jar afterwards.
+    this.jar = new CookieJar();
+    this.rebuildClients();
+    const client = viaProxy && this.proxyClient ? this.proxyClient : this.directClient;
 
     const landingRes = await client.get("/login");
     this.extractCsrf(landingRes.data);
@@ -392,7 +402,7 @@ export class VtopClient {
 
   /** Diagnostic only: return the raw prelogin HTML that should contain the captcha. */
   async debugLoginPageHtml(): Promise<string> {
-    return this.initSession(this.directClient);
+    return this.initSession(false);
   }
 
   /**
@@ -401,14 +411,15 @@ export class VtopClient {
    * score). Returns the image if found, plus whether reCAPTCHA was seen.
    */
   private async tryCaptchaOn(
-    client: AxiosInstance,
-    label: string,
+    label: "direct" | "proxy",
   ): Promise<{ image?: string; sawRecaptcha: boolean; lastHtml: string }> {
     const MAX_ATTEMPTS = 4;
     let lastHtml = "";
     let sawRecaptcha = false;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const html = await this.initSession(client);
+      // initSession resets the jar and rebuilds the clients, so the label —
+      // not a held instance — selects which client each attempt uses.
+      const html = await this.initSession(label === "proxy");
       lastHtml = html;
 
       const match =
@@ -453,7 +464,7 @@ export class VtopClient {
    */
   async getCaptcha(): Promise<string> {
     if (!(this.proxyAll && this.proxyClient)) {
-      const direct = await this.tryCaptchaOn(this.directClient, "direct");
+      const direct = await this.tryCaptchaOn("direct");
       if (direct.image) {
         this.armedViaProxy = false;
         return await this.prepareCaptcha(direct.image);
@@ -477,7 +488,7 @@ export class VtopClient {
       );
     }
 
-    const viaProxy = await this.tryCaptchaOn(this.proxyClient!, "proxy");
+    const viaProxy = await this.tryCaptchaOn("proxy");
     if (viaProxy.image) {
       this.armedViaProxy = true;
       return await this.prepareCaptcha(viaProxy.image);
@@ -689,6 +700,14 @@ export class VtopClient {
     // A new session must never serve pages fetched under the old one.
     this.liveCache.clear();
     this.inflightPages.clear();
+    // Drop the cookies too. /processLogout invalidates the JSESSIONID
+    // server-side, and VTOP answers a subsequent GET /login that still carries
+    // the dead session cookie with HTTP 404 instead of minting a fresh session
+    // (verified live: post-logout getCaptcha failed twice with UPSTREAM 404 on
+    // GET /vtop/login, while a fresh jar succeeded). Keeping the jar would leave
+    // every later login broken until the process restarted.
+    this.jar = new CookieJar();
+    this.rebuildClients();
     this.onSessionClear?.();
   }
 

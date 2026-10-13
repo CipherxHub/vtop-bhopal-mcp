@@ -1,5 +1,6 @@
-import { mkdirSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
+import { mkdirSync, writeFileSync, readdirSync, unlinkSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { spawn } from "node:child_process";
 import path from "node:path";
 
 /**
@@ -69,5 +70,74 @@ function pruneOldCaptchas(dir: string): void {
     }
   } catch {
     /* best effort only */
+  }
+}
+
+/**
+ * Hands-on convenience for clients whose model cannot read a local image.
+ *
+ * Codex's TUI renders no MCP `image` content blocks, and its model will not open
+ * a file to look at one either — so on that client the captcha round trip needs a
+ * human. With `VTOP_CAPTCHA_OPEN=1` the server opens the JPEG itself the moment it
+ * is written, so the only thing left to do is read it off the screen and type it
+ * back. That keeps the whole exchange inside the one MCP session, which a
+ * standalone helper script cannot do: it spawns its own server, and its login
+ * lands somewhere the assistant never sees.
+ *
+ * OFF BY DEFAULT. This makes the server spawn a GUI process on the host, which is
+ * fine for a local single-user stdio server and wrong for a shared connector where
+ * one process serves many people and every call would throw a window on whoever is
+ * sitting at the keyboard. Set it for stdio, leave it unset for the HTTP connector.
+ *
+ * Returns true only if a viewer was actually launched. Never throws: login must
+ * not depend on a desktop being available (a headless box, an SSH session, a
+ * container all have no viewer, and there the file path is still the answer).
+ */
+export function isCaptchaOpenEnabled(): boolean {
+  return process.env.VTOP_CAPTCHA_OPEN === "1";
+}
+
+/**
+ * Build the platform's viewer invocation. Exported separately so it can be
+ * asserted without spawning a real GUI process during tests.
+ *
+ * The path is always one we generated inside a directory we control — it never
+ * contains user input — and it is passed as a distinct argv element with
+ * `shell: false`, so there is no string interpolation to get wrong.
+ */
+export function captchaOpenCommand(
+  file: string,
+  platform: NodeJS.Platform = process.platform,
+): { cmd: string; args: string[] } | null {
+  if (platform === "win32") {
+    // `start` is a cmd.exe builtin, so cmd has to be invoked directly. The empty
+    // "" is the window title `start` would otherwise steal from the path.
+    return { cmd: "cmd", args: ["/c", "start", "", file] };
+  }
+  if (platform === "darwin") {
+    return { cmd: "open", args: [file] };
+  }
+  if (platform === "linux") {
+    return { cmd: "xdg-open", args: [file] };
+  }
+  return null;
+}
+
+export function openCaptchaImage(file: string): boolean {
+  if (!isCaptchaOpenEnabled() || !existsSync(file)) return false;
+  const invocation = captchaOpenCommand(file);
+  if (!invocation) return false;
+  try {
+    const child = spawn(invocation.cmd, invocation.args, {
+      detached: true,
+      stdio: "ignore",
+      shell: false,
+    });
+    // Detach so the viewer outlives this call and does not keep the MCP server's
+    // stdio pipes open, which would deadlock the transport.
+    child.unref();
+    return true;
+  } catch {
+    return false;
   }
 }

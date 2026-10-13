@@ -71,14 +71,16 @@ npm run build
 
 ### Your credentials
 
-Create a `.env` in the project folder with **your own** VTOP login:
+Create a `.env` in the project folder with **your own** VTOP login
+(full details, including the Windows equivalent of `chmod 600`, are in
+[Connect it](#connect-it)):
 
 ```bash
 VTOP_USERNAME=your-registration-number
 VTOP_PASSWORD=your-vtop-password
 ```
 
-Then `chmod 600 .env`. It's gitignored and never committed. If you skip this, the assistant asks you in the chat the first time it needs them.
+It's gitignored and never committed. If you skip this, the assistant asks you in the chat the first time it needs them.
 
 See [`.env.example`](.env.example) for the full list of optional settings.
 
@@ -86,28 +88,62 @@ See [`.env.example`](.env.example) for the full list of optional settings.
 
 ## Connect it
 
-Replace `/path/to/vtop-bhopal-mcp` with where you cloned it.
+Three steps for every client: build the server, create the `.env`, paste the
+config. Replace `/path/to/vtop-bhopal-mcp` with where you cloned it. In JSON
+files, use **forward slashes** (`D:/vtop-bhopal-mcp/…`) — backslashes need
+escaping and are the commonest reason a pasted config silently fails.
 
-**Claude Code**
+### 1. Build
 
 ```bash
-claude mcp add vtop -s user -- node --env-file=/path/to/vtop-bhopal-mcp/.env /path/to/vtop-bhopal-mcp/dist/index.js
+git clone https://github.com/CipherxHub/vtop-bhopal-mcp.git
+cd vtop-bhopal-mcp
+npm install        # run ON the machine that will use it — see note below
+npm run build
 ```
 
-**Claude Desktop / Cursor / Windsurf / Cline** — same `command` + `args` shape in your client's MCP config file:
+`dist/` is not committed, so the build step is required. Never copy
+`node_modules/` between machines: `sharp` ships a platform-specific native
+binary, so an install copied from Windows will not start on macOS/Linux (and
+vice versa). `npm install` on the target machine is the fix.
 
-```json
-{
-  "mcpServers": {
-    "vtop": {
-      "command": "node",
-      "args": ["--env-file=/path/to/vtop-bhopal-mcp/.env", "/path/to/vtop-bhopal-mcp/dist/index.js"]
-    }
-  }
-}
+### 2. Credentials
+
+Create a `.env` in the project folder with **your own** VTOP login:
+
+```bash
+VTOP_USERNAME=your-registration-number
+VTOP_PASSWORD=your-vtop-password
 ```
 
-**OpenCode** — V2 uses `mcp.servers`, and `command` is an **array**:
+It's gitignored and never committed. Then lock it down: `chmod 600 .env` on
+macOS/Linux. That command is a no-op on Windows — use this instead so other
+local users cannot read your password:
+
+```powershell
+icacls .env /inheritance:r /grant:r "$env:USERNAME:(F)" "BUILTIN\Administrators:(F)" "NT AUTHORITY\SYSTEM:(F)"
+```
+
+If you skip the `.env`, the assistant asks you in the chat the first time it
+needs credentials. See [`.env.example`](.env.example) for the full list of
+optional settings.
+
+> **Where each client reads settings from.** The server never reads a `.env`
+> by itself — something has to hand it the variables. For every client below
+> except Codex, that something is Node's `--env-file=` flag in the pasted
+> command, so the `.env` you just made is what gets loaded. **Codex is the
+> exception:** it has no `--env-file` mechanism, so credentials (and
+> `VTOP_CAPTCHA_OPEN`) go in its own config file's `env` block instead. A
+> `.env` sitting next to the server is silently ignored by Codex.
+
+### 3. Paste the config
+
+**OpenCode** — global config, so it works in every project:
+
+| OS | File |
+|---|---|
+| Windows | `C:\Users\<you>\.config\opencode\opencode.jsonc` |
+| macOS / Linux | `~/.config/opencode/opencode.jsonc` |
 
 ```jsonc
 {
@@ -127,29 +163,185 @@ claude mcp add vtop -s user -- node --env-file=/path/to/vtop-bhopal-mcp/.env /pa
 }
 ```
 
-> **Do not set `cwd` on this entry.** With `cwd` present the server connects from
-> some directories and times out from others (`Request timed out`, and the log
-> shows `Received a response for an unknown message ID`). The server resolves
-> every path absolutely, so `cwd` buys nothing. This was reproduced on a second
-> machine; removing it fixed it.
+Then `opencode service restart`, start a **new chat** (tools load at session
+start), and check with `opencode mcp list` — you want `✓ vtop connected`.
 
-> **Use the config file, not `opencode mcp add`.** As of v2.0.28 the CLI rejects
-> `--env-file` after the `--` separator (`Unrecognized flag`), so the documented
-> `mcp add` route cannot pass credentials. Editing the JSON works.
+**Codex CLI** — easiest via its own command (it writes the file for you):
 
-> **No `.env`?** Drop the `--env-file=…` argument. Node *exits* on a missing env file rather than ignoring it, which shows up as `✗ vtop failed` — so only add the flag once the file exists.
+```powershell
+codex mcp add vtop `
+  --env VTOP_USERNAME=your-registration-number `
+  --env VTOP_PASSWORD=your-vtop-password `
+  --env VTOP_BASE_URL=https://vtop.vitbhopal.ac.in/vtop `
+  -- node D:/vtop-bhopal-mcp/dist/index.js
+```
 
-> **If your client does not show the captcha image:** that is the client, not you.
-> Codex's TUI and OpenCode's plain TUI both drop MCP `image` content blocks. Since
-> 0.1.6 `get_captcha` also writes the JPEG to disk and returns the absolute path
-> as `captchaFile` (default `%TEMP%\vtop-mcp-captcha\`, override with
-> `VTOP_CAPTCHA_DIR`), so you can always open it. Never let the model guess the
-> characters — a wrong guess is a real failed login attempt, and VTOP locks
-> accounts after repeated failures.
+That lands in `C:\Users\<you>\.codex\config.toml` on Windows
+(`~/.codex/config.toml` on macOS/Linux) as:
 
-Then **start a new chat** (tools load at session start) and ask something.
+```toml
+[mcp_servers.vtop]
+command = "node"
+args = ['D:/vtop-bhopal-mcp/dist/index.js']
 
-Check it worked with `claude mcp list` (Claude Code) or `opencode mcp list` (OpenCode). If the tool list looks stale in OpenCode, run `opencode service restart`.
+[mcp_servers.vtop.env]
+VTOP_BASE_URL = "https://vtop.vitbhopal.ac.in/vtop"
+VTOP_USERNAME = "your-registration-number"
+VTOP_PASSWORD = "your-vtop-password"
+```
+
+Check with `codex mcp list`. **Quit Codex completely** (all windows — the
+background process holds the old server open), relaunch, and start a new chat.
+Optional safety guard — prompt before every login:
+
+```toml
+[mcp_servers.vtop.tools.login]
+approval_mode = "approve"
+```
+
+**Claude Code:**
+
+```bash
+claude mcp add vtop -s user -- node --env-file=/path/to/vtop-bhopal-mcp/.env /path/to/vtop-bhopal-mcp/dist/index.js
+```
+
+Check with `claude mcp list`, then start a new chat.
+
+**Claude Desktop** — same `command` + `args` shape in its config file:
+
+| OS | File |
+|---|---|
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
+
+```json
+{
+  "mcpServers": {
+    "vtop": {
+      "command": "node",
+      "args": ["--env-file=/path/to/vtop-bhopal-mcp/.env", "/path/to/vtop-bhopal-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop after editing.
+
+**Cursor** — global `~/.cursor/mcp.json`, or `<project>/.cursor/mcp.json` for
+one workspace. Same `mcpServers` shape as Claude Desktop above.
+
+**VS Code** — workspace file `.vscode/mcp.json` (top-level key is `servers`
+here, not `mcpServers`), or run `MCP: Open User Configuration` from the
+command palette for all workspaces:
+
+```json
+{
+  "servers": {
+    "vtop": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/path/to/vtop-bhopal-mcp/dist/index.js"],
+      "envFile": "/path/to/vtop-bhopal-mcp/.env"
+    }
+  }
+}
+```
+
+VS Code reads `envFile` natively, so no `--env-file` flag is needed. Check
+with `MCP: List Servers`.
+
+**Antigravity** — global `~/.gemini/config/mcp_config.json`, or
+`.agents/mcp_config.json` inside one workspace (or open the agent panel
+`…` → MCP Servers → Manage MCP Servers → View raw config):
+
+```json
+{
+  "mcpServers": {
+    "vtop": {
+      "command": "node",
+      "args": ["/path/to/vtop-bhopal-mcp/dist/index.js"],
+      "env": {
+        "VTOP_USERNAME": "your-registration-number",
+        "VTOP_PASSWORD": "your-vtop-password",
+        "VTOP_BASE_URL": "https://vtop.vitbhopal.ac.in/vtop"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Troubleshooting
+
+Every entry below was hit on a real machine during testing — symptom, cause,
+fix.
+
+**1. `✗ vtop failed` the moment you add it.**
+Node *exits* on a missing `--env-file` instead of ignoring it. Create the
+`.env` first, or drop the `--env-file=…` argument until the file exists.
+
+**2. `Request timed out` (OpenCode), log says `unknown message ID`.**
+You set `cwd` on the server entry. It connects from some directories and
+times out from others. Remove `cwd` — the server resolves every path
+absolutely, so it buys nothing.
+
+**3. `opencode mcp add` rejects `--env-file` (`Unrecognized flag`).**
+As of v2.0.28 the CLI cannot pass it even after `--`. Hand-edit the JSON
+instead, exactly as shown above.
+
+**4. The captcha image is not visible.**
+Some clients drop MCP `image` content blocks (confirmed: Codex's TUI,
+OpenCode's plain TUI). `get_captcha` always writes the JPEG to disk and
+returns the absolute path as `captchaFile` (default `%TEMP%\vtop-mcp-captcha\`,
+override with `VTOP_CAPTCHA_DIR`), so open that file and read it. **Never let
+the model guess the characters** — a wrong guess is a real failed login
+attempt, and VTOP locks accounts after repeated failures.
+*Hands-free option (experimental branch):* `VTOP_CAPTCHA_OPEN=1` makes the
+server open the image in a viewer the moment it is written. Put it in the
+`.env` for clients launched with `--env-file`, or in Codex's
+`[mcp_servers.vtop.env]` block. Local single-user use only — on a shared
+connector every call would pop a window on whoever is at the keyboard.
+
+**5. `INVALID_CAPTCHA` over and over.**
+The image expires in 30–60 seconds, and a slow round trip can outlast it. Ask
+for a fresh captcha and answer fast. After three consecutive rejections the
+server stops you itself and asks for a human — that is the safety stop
+working, not a bug. Do not hammer retries: repeated failures escalate VTOP's
+risk scoring toward `MAX_LOGIN_ATTEMPTS`, which needs a browser reset.
+
+**6. `UPSTREAM: Request failed with status code 404` on `get_captcha`,
+especially right after logout.**
+Fixed on this branch: `logout()` used to keep the dead session cookie, and
+VTOP 404s a `/login` that carries it. Update, rebuild, restart your client.
+If you are on `main` without the fix, restarting the client process also
+clears it.
+
+**7. `RECAPTCHA_REQUIRED` — VTOP shows Google reCAPTCHA instead of the image.**
+VTOP's risk score for your IP/session is high (common after several rapid
+logins). Wait a while before retrying. A residential proxy via
+`VTOP_PROXY_URL` also helps; datacentre IPs reliably trigger it.
+
+**8. `npm run test:all` fails on `openssl` / native modules.**
+The suite needs `openssl` for its local HTTPS mock — on Windows that comes
+with Git for Windows. And `sharp` compiles per platform: always run
+`npm install` on the machine itself, never copy `node_modules` across.
+
+**9. Config change not picked up / stale tool list.**
+MCP servers start with the client session. New chat after any config edit;
+full client restart after `config.toml` / Desktop JSON edits;
+`opencode service restart` for OpenCode. A stale server process also pins old
+code — rebuilding `dist/` does nothing to a process that already loaded it,
+so kill leftovers after every rebuild.
+
+**10. `apply_leave` and approvals.**
+Of the 22 tools, 21 are read-only. `apply_leave` submits a real hostel leave
+application to your proctor — two-step (preview returns a token, confirm
+repeats the identical fields plus that token), but a live write all the same.
+Keep approval prompts on for it (and for `login`) in clients that support
+them, and never share a `.env` or a `config.toml` holding someone else's
+credentials: the account behind them is the one VTOP sees.
 
 ---
 
@@ -192,7 +384,7 @@ Full reference, including arguments and return shapes: **[docs/tools.md](docs/to
 
 | | |
 |---|---|
-| [docs/tools.md](docs/tools.md) | All 23 tools — arguments, returns, read/write |
+| [docs/tools.md](docs/tools.md) | All 22 tools — arguments, returns, read/write |
 | [docs/hostel-leave.md](docs/hostel-leave.md) | Leave types, rules, the two-step confirmation |
 | [docs/http-connector.md](docs/http-connector.md) | Hosting it remotely, and its security model |
 | [docs/errors.md](docs/errors.md) | Error codes, recovery paths, troubleshooting |

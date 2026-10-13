@@ -14,7 +14,7 @@ npm run test:privacy   # fixture hygiene guard
 npm run test:all       # everything above, then build + HTTP suite + MCP smoke test
 ```
 
-**281 offline checks.** Every suite except the `e2e` ones needs no VTOP account
+**294 offline checks.** Every suite except the `e2e` ones needs no VTOP account
 and touches no network — deliberate, so the suite is safe in CI.
 
 `npm run build` runs `tsup` only. **Run `typecheck` separately** — a build that
