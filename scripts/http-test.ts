@@ -389,6 +389,7 @@ try {
     assert.ok(svg.includes("any assistant"), "og image must match the client-neutral hero");
     assert.doesNotMatch(svg, /ChatGPT/, "og image must not single out one client");
   });
+  await check("register never echoes the submitted password back", async () => {
     const html = await (
       await fetch(`${multi.base}/register`, {
         method: "POST",
