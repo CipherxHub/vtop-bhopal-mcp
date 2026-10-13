@@ -117,7 +117,8 @@ header.bar::before{content:"";position:absolute;top:0;bottom:0;left:50%;
 @media (max-width:560px){.bar nav a.madeby{display:none}}
 .bar nav a:hover{color:var(--ink)}
 .bar nav a::after{content:"";position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--ink);transition:right .25s ease}
-.bar nav a:hover::after{right:0}
+.formhint{color:var(--soft);font-size:13px;line-height:1.45;margin:8px 0 18px;max-width:44em}
+.formhint strong{color:var(--ink);font-weight:600;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}.bar nav a:hover::after{right:0}
 .bar nav a.madeby{color:var(--ink)}
 .bar nav a.madeby strong{color:var(--accent);font-weight:600}
 
@@ -444,7 +445,8 @@ export function landingPage(origin: string, canonicalPath: string): string {
     <p class="lead">Your VTOP credentials are encrypted into the link and never stored.</p>
     <form method="POST" action="/register" autocomplete="off">
       <label class="label" for="username">VTOP username</label>
-      <div class="field"><input id="username" name="username" type="text" placeholder="e.g. 23MEIXXXXX" autocomplete="off" required></div>
+      <div class="field"><input id="username" name="username" type="text" placeholder="e.g. 23ABC12345" autocomplete="off" required></div>
+      <p class="formhint">Two digits for the batch, three letters for the branch, then five digits for your number &mdash; <strong>23ABC12345</strong> is the shape, not a real id.</p>
       <label class="label" for="password">VTOP password</label>
       <div class="field">
         <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="off" required>
