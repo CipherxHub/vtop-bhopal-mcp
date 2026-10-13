@@ -16,9 +16,10 @@ import {
 import {
   findClassOverlaps,
   findExamOverlaps,
-  leaveFingerprint,
+  issuePreviewToken,
   normaliseTime,
   validateLeave,
+  verifyPreviewToken,
   type ExamOverlapResult,
   type LeaveRequest,
 } from "../services/leave.js";
@@ -222,7 +223,7 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
       "sent. You get back the normalised values, every rule that fired, any classes the " +
       "leave would make you miss, and a previewToken.\n" +
       "  Call 2 (submit): repeat the SAME details plus confirm=true and the previewToken. " +
-      "The token is a fingerprint of the exact field values, so if anything changed since " +
+      "The token is server-signed, single-use and expires after 10 minutes, so if anything changed since " +
       "the preview the submission is refused and you must preview again.\n" +
       "Always show the user the preview and get their agreement before calling with " +
       "confirm=true. Never invent a previewToken or set confirm=true on a first call.\n" +
@@ -266,7 +267,8 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
       }
 
       const validation = validateLeave(request, { todayISO: today, knownTypes });
-      const fingerprint = leaveFingerprint(request);
+      // Server-signed single-use token (issue #6) binding the exact fields.
+      const previewTokenIssued = issuePreviewToken(request);
 
       const semesterId = await client.getCurrentSemesterId();
       const overlap = validation.durationDays
@@ -352,10 +354,11 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
                   ? `No clash - ${exams.cleared.length} exam(s) fall inside the leave dates but not your hours away`
                   : "No exams fall inside this leave",
         },
-        previewToken: fingerprint,
+        previewToken: previewTokenIssued,
         nextStep:
           "Show this to the user. If they agree, call apply_leave again with the IDENTICAL " +
-          "fields plus confirm=true and previewToken=" + fingerprint + ".",
+          "fields plus confirm=true and previewToken=" + previewTokenIssued + ". " +
+          "The token is single-use and expires after 10 minutes.",
       };
 
       // --- preview path: never writes ---
@@ -381,14 +384,12 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
             "without confirm first.",
         };
       }
-      if (previewToken !== fingerprint) {
+      const check = verifyPreviewToken(request, previewToken);
+      if (!check.ok) {
         return {
           ...preview,
           mode: "CONFIRM REJECTED - nothing submitted",
-          verdict:
-            "The previewToken does not match these field values, so something changed " +
-            "since the preview. Nothing was submitted - preview again and confirm the " +
-            "exact request you were shown.",
+          verdict: `Invalid preview token (${check.reason}). Nothing was submitted - preview again and confirm the exact request you were shown.`,
         };
       }
       if (!validation.valid) {
@@ -410,13 +411,46 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
       });
 
       const applied = parseLeaveRecords(responseHtml);
+      const vtopMessage = extractMessage(responseHtml);
+      // VTOP rejects bad submits server-side (e.g. over a duration cap) by
+      // returning the form/error page with no new leave row. Never report
+      // success when nothing was created — and never claim success on zero
+      // rows without affirmative confirmation either.
+      if (applied.length === 0) {
+        if (/not exceed|reject|fail|error|unable|cannot|invalid/i.test(vtopMessage ?? "")) {
+          return {
+            mode: "SUBMIT REJECTED - nothing created",
+            submitted: request,
+            submittedAt: new Date().toISOString(),
+            vtopResponse: {
+              leaveRecords: applied,
+              message: vtopMessage,
+            },
+            verdict:
+              vtopMessage ??
+              "VTOP did not create a leave — no new record was returned. Nothing was submitted.",
+          };
+        }
+        return {
+          mode: "SUBMIT UNCLEAR - no new record parsed",
+          submitted: request,
+          submittedAt: new Date().toISOString(),
+          vtopResponse: {
+            leaveRecords: applied,
+            message: vtopMessage,
+          },
+          verdict:
+            "VTOP returned no new leave row and no clear confirmation. Call get_leave_status " +
+            "before assuming anything was created.",
+        };
+      }
       return {
         mode: "SUBMITTED",
         submitted: request,
         submittedAt: new Date().toISOString(),
         vtopResponse: {
           leaveRecords: applied,
-          message: extractMessage(responseHtml),
+          message: vtopMessage,
         },
         nextStep:
           "Call get_leave_status to see the approval state. A leave is not approved until " +

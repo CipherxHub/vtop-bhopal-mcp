@@ -1,4 +1,4 @@
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
 import express, { type Request, type Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -61,7 +61,23 @@ const CORS_ORIGINS = new Set(
 
 // One transport per active MCP session. Each session gets its own MCP server
 // instance, but the underlying VtopClient is shared per user (see below).
-const transports: Record<string, StreamableHTTPServerTransport> = {};
+// Bound to the caller's token hash (issue #5): a session id alone is not
+// enough to drive the session — the same token must be presented on reuse.
+const transports: Record<string, { t: StreamableHTTPServerTransport; user: string }> = {};
+
+/** Hash identifying the caller: their connector token, or the single-user key. */
+function callerKey(req: Request): string {
+  return createHash("sha256")
+    .update(extractToken(req) ?? SINGLE_USER_KEY)
+    .digest("hex");
+}
+
+/** Constant-time comparison so session ownership cannot be probed byte-by-byte. */
+function keysEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 // PER-USER ISOLATION. Each connector token gets its OWN VtopClient — its own
 // cookie jar, login state, and caches (attendance/grades/timetable/calendar all
@@ -432,9 +448,19 @@ async function handleMcpPost(req: Request, res: Response) {
 
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   let transport: StreamableHTTPServerTransport;
+  const caller = callerKey(req);
 
-  if (sessionId && transports[sessionId]) {
-    transport = transports[sessionId];
+  const existing = sessionId ? transports[sessionId] : undefined;
+  if (existing) {
+    if (!keysEqual(existing.user, caller)) {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Bad Request: No valid session ID provided" },
+        id: null,
+      });
+      return;
+    }
+    transport = existing.t;
   } else if (!sessionId && isInitializeRequest(req.body)) {
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
@@ -453,12 +479,15 @@ async function handleMcpPost(req: Request, res: Response) {
       // so this cannot be dropped unnoticed by a refactor.
       enableJsonResponse: true,
       onsessioninitialized: (sid) => {
-        transports[sid] = transport;
+        transports[sid] = { t: transport, user: caller };
       },
     });
 
     transport.onclose = () => {
-      if (transport.sessionId) delete transports[transport.sessionId];
+      if (transport.sessionId) {
+        const e = transports[transport.sessionId];
+        if (e && e.t === transport) delete transports[transport.sessionId];
+      }
     };
 
     // Reuse this user's VtopClient across MCP sessions so the prelogin session
@@ -485,11 +514,12 @@ async function handleMcpPost(req: Request, res: Response) {
 async function handleSessionRequest(req: Request, res: Response) {
   if (!authenticate(req, res)) return;
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
-  if (!sessionId || !transports[sessionId]) {
+  const entry = sessionId ? transports[sessionId] : undefined;
+  if (!sessionId || !entry || !keysEqual(entry.user, callerKey(req))) {
     res.status(400).send("Invalid or missing session ID");
     return;
   }
-  await transports[sessionId].handleRequest(req, res);
+  await entry.t.handleRequest(req, res);
 }
 
 // Each method is mounted twice: the bare path (header / single-user clients)
@@ -556,6 +586,12 @@ app.post("/register", (req: Request, res: Response) => {
 
 app.listen(PORT, BIND_HOST, () => {
   console.error(`VtopMCP HTTP server listening on ${BIND_HOST}:${PORT}${MCP_PATH}`);
+  if (!isMultiUserEnabled()) {
+    console.error(
+      "VtopMCP: single-user mode — no per-caller isolation. Bind to localhost or put it behind auth; " +
+        "anyone who can reach this port can use your VTOP session.",
+    );
+  }
   if (isMultiUserEnabled()) {
     console.error(`Multi-user mode ON — users register at :${PORT}/register`);
   }

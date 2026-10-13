@@ -45,6 +45,7 @@
  */
 
 import type { CalendarDay, Weekday } from "./attendance-calc.js";
+import { weekdayOf } from "./attendance-calc.js";
 
 // --- the raw-mark rules ----------------------------------------------------
 
@@ -470,9 +471,10 @@ export function sessionsBefore(
     if (day.date < todayISO) continue;
     if (day.date > deadlineISO) continue;
     // A calendar entry may override the weekday (a working Saturday running
-    // the Thursday timetable), so use the day-order when one is present.
-    const weekday = day.dayOrderWeekday ?? null;
-    if (weekday && set.has(weekday)) count++;
+    // the Thursday timetable), so use the day-order when one is present,
+    // otherwise the natural weekday of the date.
+    const weekday = day.dayOrderWeekday ?? weekdayOf(day.date);
+    if (set.has(weekday)) count++;
   }
   return count;
 }

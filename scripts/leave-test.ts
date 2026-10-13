@@ -19,11 +19,13 @@ import {
   examClockToMinutes,
   findClassOverlaps,
   findExamOverlaps,
+  issuePreviewToken,
   leaveFingerprint,
   minutesOfDay,
   normaliseExamDate,
   normaliseTime,
   validateLeave,
+  verifyPreviewToken,
   type LeaveRequest,
 } from "../src/services/leave.js";
 
@@ -257,6 +259,36 @@ check("the fingerprint is case-insensitive only for the leave code", () => {
   assert.equal(leaveFingerprint(req({ leaveCode: "og1" })), leaveFingerprint(req()));
 });
 
+// --- server-signed preview tokens (issue #6) -------------------------------
+check("an issued preview token verifies for the identical request", () => {
+  const r = req();
+  const tok = issuePreviewToken(r);
+  assert.match(tok, /^[0-9a-f]{32}\.\d+\.[A-Za-z0-9_-]+$/);
+  assert.deepEqual(verifyPreviewToken(r, tok), { ok: true });
+});
+
+check("a preview token is single-use", () => {
+  const r = req();
+  const tok = issuePreviewToken(r);
+  assert.deepEqual(verifyPreviewToken(r, tok), { ok: true });
+  const second = verifyPreviewToken(r, tok);
+  assert.equal(second.ok, false);
+  assert.match((second as { reason: string }).reason, /already used/);
+});
+
+check("a preview token does not verify for changed fields", () => {
+  const tok = issuePreviewToken(req());
+  const altered = verifyPreviewToken(req({ toTime: "17:00" }), tok);
+  assert.equal(altered.ok, false);
+  assert.match((altered as { reason: string }).reason, /does not match/);
+});
+
+check("a forged preview token is rejected", () => {
+  const r = req();
+  assert.equal(verifyPreviewToken(r, "forged").ok, false);
+  assert.equal(verifyPreviewToken(r, leaveFingerprint(r)).ok, false);
+});
+
 // --- class overlap ---------------------------------------------------------
 const CLASSES = [
   { date: "2026-10-20", courseCode: "ABC105", courseName: "Course E", startTime: "08:30", endTime: "10:00", venue: "AB-318" },
@@ -306,6 +338,22 @@ check("a multi-day leave misses every class on every covered day", () => {
   assert.equal(r.affectedDays, 2);
   assert.equal(r.byCourse.length, 3);
   assert.equal(r.byCourse.reduce((s, c) => s + c.missed, 0), 3);
+});
+
+check("a multi-day leave keeps boundary filtering on first and last days", () => {
+  // Departs 2026-10-20 17:00, returns 2026-10-22 10:00. Morning class on the
+  // 20th ends before departure so it is not missed; interior 21st is missed.
+  const r = findClassOverlaps(
+    { fromDate: "2026-10-20", fromTime: "17:00", toDate: "2026-10-22", toTime: "10:00" },
+    [
+      ...CLASSES,
+      { date: "2026-10-22", courseCode: "ABC101", courseName: "Course A", startTime: "11:40", endTime: "13:10", venue: "AB02-409" },
+    ],
+  );
+  assert.ok(!r.missed.some((m) => m.date === "2026-10-20"), "20th morning classes survive a 17:00 departure");
+  assert.ok(r.missed.some((m) => m.date === "2026-10-21"), "interior day is fully missed");
+  assert.ok(!r.missed.some((m) => m.date === "2026-10-22"), "11:40 class after a 10:00 return is not missed");
+  assert.ok(r.partialDays.includes("2026-10-20"), "20th reported as partial");
 });
 
 check("classes outside the window are never counted", () => {
