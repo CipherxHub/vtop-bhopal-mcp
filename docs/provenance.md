@@ -25,7 +25,7 @@ divyarthjain              divyarthjain/vtop-bhopal-mcp    Apache-2.0
         ▼
 this project              CipherxHub/vtop-bhopal-mcp      Apache-2.0
   leave tools, pass-eligibility arithmetic, error taxonomy, cache, keepalive,
-  captcha upscaling, structured errors, 117 offline checks
+  captcha upscaling, structured errors, 135 offline checks
   and all testing against the live portal
 ```
 
@@ -103,7 +103,7 @@ Nine files with no upstream counterpart, 2,127 lines:
 
 Plus substantial edits to inherited files: `vtop-parser.ts` (404 lines changed
 against VtopMCP), `vtop-client.ts`, `schemas/index.ts`, `types/index.ts`, and the
-test suite — 117 offline checks, most of which do not exist upstream.
+test suite — 135 offline checks, most of which do not exist upstream.
 
 \* `src/tools/leave.ts` is counted in the tool-layer total above; the services
 figure excludes it. See the diff script below if you want to reproduce these

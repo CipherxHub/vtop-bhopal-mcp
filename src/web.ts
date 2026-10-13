@@ -14,8 +14,8 @@ const REPO_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp";
 const AUTHOR_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp";
 const AUTHOR_URL_TEXT = "github.com/CipherxHub/vtop-bhopal-mcp";
 const AUTHOR_NAME = "vtop-bhopal-mcp contributors";
-const NPM_PKG = "vtop-bhopal-mcp";
-const NPM_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp#readme";
+// npm publishing is not set up (the package is private), so the site points at
+// the repo and a clone command rather than an install line that would 404.
 
 // Deep link straight to ChatGPT's Apps → Developer-mode page. ChatGPT has no
 // install/prefill API and same-origin rules forbid us from touching its tab,
@@ -240,7 +240,7 @@ function layout(o: LayoutOpts): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(o.title)}</title>
 <meta name="description" content="${escapeHtml(o.description)}">
-<meta name="keywords" content="VTOP, VIT Bhopal, ChatGPT, MCP, connector, attendance, timetable, marks, CGPA, hostel leave, vtop">
+<meta name="keywords" content="VTOP, VIT Bhopal, MCP, model context protocol, connector, Claude, ChatGPT, Cursor, OpenCode, attendance, timetable, marks, CGPA, hostel leave, vtop">
 <meta name="author" content="${AUTHOR_NAME}">
 <link rel="canonical" href="${escapeHtml(canonical)}">
 <meta name="robots" content="${o.noindex ? "noindex,nofollow" : "index,follow"}">
@@ -267,18 +267,19 @@ function layout(o: LayoutOpts): string {
   <a class="wordmark" href="/"><span class="dot"></span>VTOP&nbsp;Connector</a>
   <nav>
     <a href="#how">How it works</a>
+    <a href="#connect">Connect</a>
     <a href="#safe">Safety</a>
     <a class="gh" href="${REPO_URL}" target="_blank" rel="noopener">GitHub&nbsp;↗</a>
-    <a class="madeby" href="${AUTHOR_URL}" target="_blank" rel="noopener">made by <strong>vtop-bhopal-mcp contributors</strong>&nbsp;↗</a>
+    <a class="madeby" href="${REPO_URL}" target="_blank" rel="noopener">made by <strong>vtop-bhopal-mcp contributors</strong>&nbsp;↗</a>
   </nav>
 </header>
 ${o.body}
 <footer class="foot">
-  <span class="by">Built by <a href="${AUTHOR_URL}" target="_blank" rel="noopener"><b>${AUTHOR_NAME}</b></a></span>
+  <span class="by">Built by <a href="${REPO_URL}" target="_blank" rel="noopener"><b>${AUTHOR_NAME}</b></a></span>
   <span class="links">
-    <a href="${AUTHOR_URL}" target="_blank" rel="noopener">Portfolio ↗</a>
     <a href="${REPO_URL}" target="_blank" rel="noopener">Source ↗</a>
-    <span>MIT</span>
+    <a href="${REPO_URL}/blob/main/docs/tools.md" target="_blank" rel="noopener">Tools ↗</a>
+    <span>Apache-2.0</span>
   </span>
 </footer>
 </div>
@@ -313,8 +314,65 @@ function howItWorks(): string {
   <ol class="steps">
     ${step("01", "Enter your VTOP login", "Once, on this page. Never inside a chat window.")}
     ${step("02", "Get a private link", "Your credentials are encrypted into a connector URL that's yours alone.")}
-    ${step("03", "Add it to ChatGPT", "On a paid plan, turn on <em>Developer mode</em>, create an app with <em>No&nbsp;Auth</em>, then ask “how many classes can I bunk?”. Full steps come next.")}
+    ${step("03", "Add the link to your assistant", "Paste it into Claude, ChatGPT, Cursor, OpenCode — anything that speaks remote MCP. The steps differ per app and are listed below.")}
   </ol>
+</section>`;
+}
+
+/**
+ * Per-client setup. Claude first because the connector UI is the least
+ * fiddly; ChatGPT is included because the original deep-link button and
+ * developer-mode flow are built for it, but it is now one option among
+ * several rather than the only one.
+ */
+function connectSteps(): string {
+  const d = (title: string, inner: string) =>
+    `<details><summary>${title}</summary><div class="detail">${inner}</div></details>`;
+
+  return `<section id="connect">
+  <div class="kicker"><h2 class="serif">Add it to your assistant</h2><span class="line"></span></div>
+  <p style="color:var(--soft);max-width:52em">Pick the app you use. All of them take the same link.</p>
+
+  ${d(
+    "Claude (web, desktop app, iOS, Android)",
+    `<p>Works on Free, Pro and Max. Add it once on the web or desktop app and it appears on your phone too.</p>
+     <div class="navpath"><span>Customize</span><span>Connectors</span><span>Add custom connector</span><span>paste your link</span></div>
+     <p style="margin-top:8px">Use the full link including the <code>/mcp/…</code> path and your token at the end. Then open a chat, tap <strong>+</strong> → <strong>Connectors</strong>, and switch it on.</p>
+     <p style="margin-top:8px;color:var(--soft);font-size:14px">Mobile connector install is still in beta, so add it on web first — it syncs to the app.</p>`,
+  )}
+
+  ${d(
+    "ChatGPT",
+    `<p>Needs a paid plan — <strong>Go</strong>, <strong>Plus</strong> or <strong>Pro</strong>. Not available on free.</p>
+     <div class="navpath"><span>Profile</span><span>Settings</span><span>Apps</span><span>Developer mode = ON</span></div>
+     <p style="margin-top:8px">Click <strong>Create</strong>, then paste your link as the <strong>MCP Server URL</strong> and set <strong>Authentication</strong> to <strong>No Auth</strong> — the token is already in the link.</p>
+     <p style="margin-top:8px;color:var(--soft);font-size:14px">Then start a chat, turn on the app, and mention it by name: <em>“use the VTOP Bhopal MCP tool to get my attendance.”</em></p>`,
+  )}
+
+  ${d(
+    "Cursor, Windsurf, Cline, Zed",
+    `<p>These connect by URL in a config file. Use <code>command</code> + <code>args</code>, or the client's URL field where it has one.</p>
+     <div class="codebox" style="margin-top:8px"><pre>{
+  "mcpServers": {
+    "vtop": {
+      "url": "&lt;your connector link&gt;"
+    }
+  }
+}</pre></div>`,
+  )}
+
+  ${d(
+    "Claude Code (terminal)",
+    `<p>One command. This is the path that keeps everything on your own machine instead of going through the cloud.</p>
+     <div class="codebox" style="margin-top:8px"><pre>claude mcp add --transport http vtop &lt;your connector link&gt;</pre></div>
+     <p style="margin-top:8px">Check it with <code>/mcp</code> inside a session.</p>`,
+  )}
+
+  ${d(
+    "Anything else",
+    `<p>Anything that speaks remote MCP over Streamable HTTP takes the same link. That includes OpenAI's API via <code>mcp_servers</code>, VS Code, Codex, and older stdio-only clients through the <code>mcp-remote</code> bridge.</p>
+     <p style="margin-top:8px;color:var(--soft);font-size:14px">To check a link by hand, <code>npx @modelcontextprotocol/inspector</code> will connect and list the tools.</p>`,
+  )}
 </section>`;
 }
 
@@ -324,35 +382,37 @@ function safety(): string {
   return `<section id="safe">
   <div class="kicker"><h2 class="serif">Built to be safe</h2><span class="line"></span></div>
   <ul class="safelist">
-    ${li("Password never stored.", "Your password is sealed with AES-256-GCM <em>inside the link itself</em>, never written to a database. Only basic usage stats are kept.")}
+    ${li("Password never stored.", "Your password is sealed with AES-256-GCM <em>inside the link itself</em>. The plaintext is never written to disk or to a database — the link is the only copy.")}
     ${li("Never typed into chat.", "You sign in here, on a normal page over HTTPS, so your password is never exposed to the AI model.")}
-    ${li("Only your link works.", "The link is yours alone, and it can be invalidated anytime by rotating the server's secret.")}
-    ${li("Fully open source.", "Every line is public, so read exactly what runs before you trust it.")}
+    ${li("Only your link works.", "Requests without a valid token are rejected, including when the server also holds operator credentials. Rotating the server secret invalidates every link at once.")}
+    ${li("Nothing in the logs.", "There is no access logger, and session keys are stored hashed — your token is not written to stdout or to any log file.")}
+    ${li("Fully open source.", "Every line is public, so read exactly what runs before you trust it with your account.")}
   </ul>
+  <p style="color:var(--soft);max-width:52em;margin-top:14px">Treat the link like a password: it grants full access to your VTOP account. If it ever leaks, rotate the server's secret and everyone re-registers.</p>
 </section>`;
 }
 
 function buildYourOwn(): string {
+  const clone = `git clone ${REPO_URL}.git && cd vtop-bhopal-mcp && npm install && npm run build`;
   return `<section id="build">
   <div class="kicker"><h2 class="serif">Use it in your own project</h2><span class="line"></span></div>
-  <p style="color:var(--soft);max-width:46em">VTOP Bhopal MCP is free and open source, built and tested against the live VIT Bhopal portal. Clone it, run the build, and wire it into your own project.</p>
+  <p style="color:var(--soft);max-width:46em">VTOP Bhopal MCP is free and open source, built and tested against the live VIT Bhopal portal. Clone it, run the build, and wire it into your own MCP client — or run the HTTP connector yourself and skip the hosted copy entirely.</p>
   <div class="codebox" style="margin-top:14px">
-    <pre>npm install ${NPM_PKG}</pre>
-    <button class="copy" data-copy="npm install ${NPM_PKG}">${copyIcon}<span>Copy</span></button>
+    <pre>${escapeHtml(clone)}</pre>
+    <button class="copy" data-copy="${escapeHtml(clone)}">${copyIcon}<span>Copy</span></button>
   </div>
   <p style="margin-top:16px;font-size:15px;color:var(--soft)">
-    <a class="textlink" href="${NPM_URL}" target="_blank" rel="noopener">npmjs.com/package/${NPM_PKG}</a>
-    &nbsp;·&nbsp;
-    <a class="textlink" href="${AUTHOR_URL}" target="_blank" rel="noopener">${AUTHOR_URL_TEXT}</a>
+    Needs <strong>Node 20.6+</strong>. Full setup, per-client configs and the security notes are in the
+    <a class="textlink" href="${REPO_URL}" target="_blank" rel="noopener">project README</a>.
   </p>
 </section>`;
 }
 
 export function landingPage(origin: string, canonicalPath: string): string {
   const body = `<section class="hero">
-  <span class="eyebrow">MCP connector · VIT VTOP</span>
-  <h1>Your VTOP,<br>now in <em>ChatGPT</em>.</h1>
-  <p class="lede">Connect your VTOP to ChatGPT and just ask: <em>“how many classes can I bunk if I skip tomorrow?”</em> · <em>“how many OD hours have I used?”</em> · <em>“what's my CGPA?”</em> Real answers from your own VTOP, in plain English. Attendance, marks, timetable, exams, CGPA, OD hours and bunk math.</p>
+  <span class="eyebrow">MCP connector · VIT Bhopal</span>
+  <h1>Your VTOP,<br>in <em>any AI assistant</em>.</h1>
+  <p class="lede">Connect your VIT Bhopal VTOP once, then just ask: <em>“how many more classes can I skip?”</em> · <em>“what do I need in the TEE to pass?”</em> · <em>“when is my FAT and where?”</em> Real answers from your own VTOP, in plain English — attendance, marks, timetable, exams, grades, CGPA and hostel leave. Works with Claude, ChatGPT, Cursor, OpenCode and anything else that speaks MCP.</p>
   <span class="ready" style="margin-top:18px"><span class="dot"></span>Setup in under 1 minute · just 3 steps</span>
 </section>
 <section>
@@ -372,12 +432,13 @@ export function landingPage(origin: string, canonicalPath: string): string {
   </div>
 </section>
 ${howItWorks()}
+${connectSteps()}
 ${safety()}
 ${buildYourOwn()}`;
   return layout({
-    title: `${BRAND}: Connect VIT VTOP to ChatGPT`,
+    title: `${BRAND}: VIT Bhopal VTOP for Claude, ChatGPT and any MCP client`,
     description:
-      "Securely connect your VIT VTOP account to ChatGPT. Ask for your attendance, marks, timetable, exam schedule and CGPA in plain English. Credentials are encrypted, never stored.",
+      "Connect your VIT Bhopal VTOP once, then ask any AI assistant about attendance, marks, timetable, exams, grades and hostel leave in plain English. Credentials encrypted into your link, never stored.",
     origin,
     canonicalPath,
     body,
@@ -394,7 +455,7 @@ export function resultPage(opts: {
   const body = `<section class="hero" style="padding-bottom:0">
   <span class="ready"><span class="dot"></span>Link ready</span>
   <h1 style="font-size:clamp(2.4rem,7vw,4rem)">Your connector<br>is <em>live</em>.</h1>
-  <p class="lede">Copy your private link and add it to ChatGPT. That's the whole setup.</p>
+  <p class="lede">Copy your private link and add it to your AI assistant. That's the whole setup.</p>
 </section>
 <section>
   <span class="label" style="margin-top:0">Your connector URL</span>
@@ -402,27 +463,23 @@ export function resultPage(opts: {
     <pre>${safeUrl}</pre>
     <button class="copy" data-copy="${safeUrl}">${copyIcon}<span>Copy</span></button>
   </div>
-  <a class="btn cta" href="${CHATGPT_OPEN_PATH}" target="_blank" rel="noopener" data-connect="${safeUrl}"><span>Connect to ChatGPT</span>${linkOutIcon}</a>
-  <p class="connect-hint"><span class="n">1.</span> Turn on Developer mode&nbsp;&nbsp;·&nbsp;&nbsp;<span class="n">2.</span> Create app&nbsp;&nbsp;·&nbsp;&nbsp;<span class="n">3.</span> Paste link&nbsp;&nbsp;·&nbsp;&nbsp;<span class="n">4.</span> Select No&nbsp;Auth</p>
+  <a class="btn cta" href="${CHATGPT_OPEN_PATH}" target="_blank" rel="noopener" data-connect="${safeUrl}"><span>Add to ChatGPT</span>${linkOutIcon}</a>
+  <p class="connect-hint">Using Claude, Cursor or something else? The same link works — pick your app below.</p>
 </section>
+${connectSteps()}
 <section id="how" style="padding-top:8px">
-  <div class="kicker"><h2 class="serif">How to set it up in ChatGPT</h2><span class="line"></span></div>
+  <div class="kicker"><h2 class="serif">Setting up ChatGPT specifically</h2><span class="line"></span></div>
   <ol class="steps">
     <li><span class="num">01</span><div><h3>Use a paid ChatGPT plan</h3><p>This needs ChatGPT <strong>Go</strong>, <strong>Plus</strong>, or <strong>Pro</strong>. It does not work on the free plan.</p></div></li>
     <li><span class="num">02</span><div><h3>Turn on Developer mode</h3><p>Open ChatGPT and follow this path:</p><div class="navpath"><span>Profile</span><span>Settings</span><span>Apps</span><span>Developer mode = ON</span></div></div></li>
     <li><span class="num">03</span><div><h3>Create the app</h3><p>Click <strong>Create</strong>. Then:</p><p style="margin-top:6px">• <strong>Name:</strong> VTOP Bhopal MCP<br>• <strong>MCP Server URL:</strong> paste the link from the top of this page<br>• <strong>Authentication:</strong> No&nbsp;Auth</p><p style="margin-top:6px">Click Create to save.</p></div></li>
     <li><span class="num">04</span><div><h3>Ask a question</h3><p>Open a new chat and turn on <strong>VTOP Bhopal MCP</strong>. Then tell it to use the tool — for example:</p><p style="margin-top:6px"><em>“Use the VTOP Bhopal MCP tool to get my attendance.”</em></p><p style="margin-top:6px;color:var(--soft);font-size:14px">Tip: mention <strong>VTOP Bhopal MCP</strong> by name. Just asking “what's my attendance?” may not trigger the tool on its own.</p></div></li>
   </ol>
-  <details>
-    <summary>Using Claude Desktop or Cursor instead?</summary>
-    <p style="color:var(--soft);font-size:14px;margin-bottom:4px">Those run the local package, which logs in for you — no token to copy. Grab the one-click <em>Add to Cursor</em> button and ready-to-paste Claude Desktop config on the project page:</p>
-    <a class="btn" href="${AUTHOR_URL}" target="_blank" rel="noopener"><span>Set up Cursor or Claude Desktop</span>${linkOutIcon}</a>
-  </details>
   <a class="backlink" href="/register">${arrowIcon} Generate another link</a>
 </section>`;
   return layout({
     title: `Your connector link · ${BRAND}`,
-    description: "Your personal VTOP connector link is ready to add to ChatGPT.",
+    description: "Your personal VTOP connector link is ready to add to Claude, ChatGPT or any MCP client.",
     origin: opts.origin,
     canonicalPath: "/register",
     body,

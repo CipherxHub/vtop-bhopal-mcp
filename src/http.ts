@@ -29,6 +29,36 @@ import {
 const PORT = Number(process.env.PORT ?? 3000);
 const MCP_PATH = process.env.MCP_PATH ?? "/mcp";
 
+/**
+ * Interface to bind. Defaults to loopback so the server is NOT reachable from
+ * the local network by default — the common case is a tunnel on this same
+ * machine (cloudflared, ngrok), which connects over loopback.
+ *
+ * Override to "0.0.0.0" ONLY when the process must be reached from another
+ * host: a PaaS platform (Render, Railway) routes to the container from
+ * outside, and a Tailscale/Funnel setup may arrive on another interface.
+ * Binding wide exposes the port to every network the machine is on.
+ */
+const BIND_HOST = process.env.VTOP_HTTP_BIND?.trim() || "127.0.0.1";
+
+/**
+ * CORS allowlist, EMPTY BY DEFAULT — which means no CORS headers at all.
+ *
+ * A browser-origin client (the MCP Inspector) needs them; the Claude connector
+ * does not, because it connects server-side from Anthropic's cloud and never
+ * sends an Origin header. Reflecting whatever Origin arrives (the previous
+ * behaviour) lets any website the operator visits make cross-origin calls to
+ * this server, so it must be opt-in.
+ *
+ * Set VTOP_HTTP_CORS_ORIGIN=http://localhost:6274 to use the Inspector.
+ */
+const CORS_ORIGINS = new Set(
+  (process.env.VTOP_HTTP_CORS_ORIGIN ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
 // One transport per active MCP session. Each session gets its own MCP server
 // instance, but the underlying VtopClient is shared per user (see below).
 const transports: Record<string, StreamableHTTPServerTransport> = {};
@@ -184,17 +214,29 @@ if (KEEPALIVE_MS > 0) {
 const app = express();
 // Render (and most PaaS) terminate TLS at a proxy; trust it so req.protocol is
 // "https" and req.get("host") is the public hostname when we build connector URLs.
-app.set("trust proxy", true);
+//
+// Only the LOOPBACK proxy is trusted, not every network peer. cloudflared and
+// nginx both connect from 127.0.0.1, which is all this needs. `true` lets ANY
+// client forge X-Forwarded-For / X-Forwarded-Host, which poisons the client IP
+// used for logging and — worse — the connector URLs rendered on /register.
+app.set("trust proxy", "loopback");
 app.use(express.json({ limit: "4mb" }));
 app.use(express.urlencoded({ extended: false }));
 
-// CORS so the browser-based MCP Inspector can reach the server. ChatGPT
-// itself connects server-side and does not need this.
+// CORS is OFF unless VTOP_HTTP_CORS_ORIGIN names the origins to allow. See the
+// CORS_ORIGINS comment above. Reflecting whatever Origin arrives (the previous
+// behaviour) let any website the operator visited make cross-origin calls here,
+// which in env-credential mode is a drive-by path to the VTOP session.
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", req.headers.origin ?? "*");
-  res.header("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, mcp-protocol-version, authorization");
-  res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-  res.header("Access-Control-Expose-Headers", "Mcp-Session-Id");
+  const origin = req.headers.origin;
+  if (origin && CORS_ORIGINS.has(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, mcp-protocol-version, authorization");
+    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.header("Access-Control-Expose-Headers", "Mcp-Session-Id");
+    // The response varies by Origin, so shared caches must not reuse it.
+    res.header("Vary", "Origin");
+  }
   if (req.method === "OPTIONS") {
     res.sendStatus(204);
     return;
@@ -352,9 +394,17 @@ function send401(res: Response, message: string) {
 /**
  * Resolve the VTOP credentials for a request.
  *  - A valid connector token (multi-user mode) yields that user's credentials.
- *  - No token is allowed only when the server isn't enforcing multi-user, i.e.
+ *  - No token is allowed only when the server is NOT enforcing multi-user, i.e.
  *    single-user env-var credentials or the legacy in-chat login flow.
  * Returns null after sending a 401 when authentication is required but absent.
+ *
+ * FAILS CLOSED. Setting CONNECTOR_SECRET is an explicit request for token-gated
+ * access, so once it is set a token is required unconditionally. The previous
+ * logic let VTOP_USERNAME/VTOP_PASSWORD satisfy the check, which meant the
+ * documented setup — a .env with credentials, plus CONNECTOR_SECRET — served
+ * /mcp to anyone holding the URL, with no token and no warning. Since a public
+ * tunnel or PaaS host makes that URL trivially obtainable, a safe default must
+ * not depend on the operator knowing the one env combination that avoids it.
  */
 function authenticate(
   req: Request,
@@ -369,8 +419,7 @@ function authenticate(
       return null;
     }
   }
-  const hasEnvCreds = !!(process.env.VTOP_USERNAME && process.env.VTOP_PASSWORD);
-  if (isMultiUserEnabled() && !hasEnvCreds) {
+  if (isMultiUserEnabled()) {
     send401(res, "Authentication required. Visit /register to create your personal connector token.");
     return null;
   }
@@ -389,6 +438,20 @@ async function handleMcpPost(req: Request, res: Response) {
   } else if (!sessionId && isInitializeRequest(req.body)) {
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
+      // Return plain JSON instead of an SSE stream.
+      //
+      // The SDK defaults this to false, which makes every POST reply with
+      // text/event-stream. That works on localhost, but Cloudflare Quick
+      // Tunnels do not support SSE — so tool calls hang or fail through a
+      // tunnel while passing locally, which is a miserable thing to debug.
+      // JSON also keeps us independent of tunnel type.
+      //
+      // The cost is the optional server-initiated GET stream, which a
+      // tool-only server never uses: nothing pushes unsolicited messages.
+      //
+      // The regression test in scripts/http-test.ts asserts the Content-Type,
+      // so this cannot be dropped unnoticed by a refactor.
+      enableJsonResponse: true,
       onsessioninitialized: (sid) => {
         transports[sid] = transport;
       },
@@ -491,10 +554,34 @@ app.post("/register", (req: Request, res: Response) => {
     );
 });
 
-app.listen(PORT, () => {
-  console.error(`VtopMCP HTTP server listening on :${PORT}${MCP_PATH}`);
+app.listen(PORT, BIND_HOST, () => {
+  console.error(`VtopMCP HTTP server listening on ${BIND_HOST}:${PORT}${MCP_PATH}`);
   if (isMultiUserEnabled()) {
     console.error(`Multi-user mode ON — users register at :${PORT}/register`);
+  }
+  // The dangerous combination: credentials in the environment but no token
+  // gate. This is the single-user setup, and it is correct on a laptop. It is
+  // catastrophic on a public host, where anyone holding the URL gets the
+  // account. Say so loudly rather than relying on the operator remembering.
+  if (!isMultiUserEnabled() && process.env.VTOP_USERNAME && process.env.VTOP_PASSWORD) {
+    console.error(
+      "VtopMCP: WARNING — VTOP_USERNAME/VTOP_PASSWORD are set and CONNECTOR_SECRET is NOT,",
+      "so every request to /mcp is served without any token. That is fine while this",
+      "is only reachable from localhost. Before exposing it through a tunnel or a",
+      "hosting platform, unset the credential variables and set CONNECTOR_SECRET to a",
+      "long random string — users then register at /register and get a personal link.",
+    );
+  }
+  if (CORS_ORIGINS.size === 0) {
+    console.error("VtopMCP: CORS disabled — no Access-Control-* headers are sent (default).");
+  } else {
+    console.error(`VtopMCP: CORS allowlist active for ${[...CORS_ORIGINS].join(", ")}`);
+  }
+  if (BIND_HOST === "0.0.0.0") {
+    console.error(
+      "VtopMCP: WARNING — bound to 0.0.0.0, so every network this machine is on can",
+      "reach this port. Intended for PaaS platforms and Tailscale/Funnel setups only.",
+    );
   }
   if (sessionStore && !isMultiUserEnabled()) {
     console.error(
