@@ -76,6 +76,17 @@ const SYNTHETIC = new Set([
   "L9000001", "L9000002", "L9000003", "L1234567",
   "9000001", // sample proctor staff id
   "00000000-0000-0000-0000-000000000000", // all-zero CSRF placeholder
+  // The registration-form placeholder on the landing page. It matches the
+  // registration-number rule by design - it has to, or the field would not
+  // show students the real shape of their own id (2-digit batch, 3-letter
+  // branch, 5-digit sequence). It is here rather than inline because every
+  // other string of this shape must fail the build.
+  //
+  // It must stay obviously synthetic. An earlier suggestion reused the
+  // operator's own five-digit sequence with a different branch code, which is
+  // one group away from a real identifier - that is the failure this guard
+  // exists to prevent, not an acceptable placeholder.
+  "23ABC12345",
 ]);
 
 /**
