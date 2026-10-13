@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.env
+*.tsbuildinfo
+test-output/
+
+# Diagnostic artifact written by scripts/captcha-debug.ts
+captcha-page.html
+
+# Dumps written by scripts/calendar-debug.ts (raw VTOP HTML + captcha image)
+tmp-caldebug/
+
+# Local Claude Code tooling settings
+.claude/settings.local.json
+
+# Dumps written by scripts/leave-probe.ts (raw VTOP HTML + captcha images)
+tmp-leaveprobe/
+
+# Raw VTOP page dumps (VTOP_DUMP_HTML); contain session-bearing markup
+tmp-vtopdump/

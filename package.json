@@ -1,0 +1,101 @@
+{
+  "name": "vtop-bhopal-mcp",
+  "private": true,
+  "version": "0.1.5",
+  "description": "MCP server for VIT Bhopal's VTOP student portal: attendance, marks, timetable, exams, grades, calendar and bunk/OD calculators from Claude Code, Claude Desktop, Cursor and other MCP clients.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "vtop-mcp": "dist/index.js",
+    "vtop-mcp-http": "dist/http.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup && node -e \"const fs=require('fs');fs.chmodSync('dist/index.js',0o755);fs.chmodSync('dist/http.js',0o755)\"",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "start:http": "node dist/http.js",
+    "test:e2e": "tsx scripts/e2e.ts",
+    "test:mcp": "tsx scripts/mcp-smoke.ts",
+    "test:calc": "tsx scripts/calc-test.ts",
+    "test:parser": "tsx scripts/parser-test.ts",
+    "test:tools": "tsx scripts/tool-test.ts",
+    "test:session": "tsx scripts/session-test.ts",
+    "test:login": "tsx scripts/login-test.ts",
+    "captcha:probe": "tsx scripts/captcha-probe.ts",
+    "captcha:save": "tsx scripts/save-captcha.ts",
+    "raw:call": "tsx scripts/raw-call.ts",
+    "typecheck": "tsc --noEmit",
+    "test:all": "npm run typecheck && npm run test:calc && npm run test:parser && npm run test:tools && npm run test:session && npm run test:login && npm run test:marks && npm run test:cache && npm run test:exam && npm run test:leave && npm run test:leave-parse && npm run test:privacy && npm run build && npm run test:mcp",
+    "prepublishOnly": "npm run build",
+    "test:marks": "tsx scripts/marks-test.ts",
+    "test:cache": "tsx scripts/cache-test.ts",
+    "test:exam": "tsx scripts/exam-test.ts",
+    "test:leave": "tsx scripts/leave-test.ts",
+    "test:leave-parse": "tsx scripts/leave-parse-test.ts",
+    "test:privacy": "tsx scripts/privacy-test.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "claude-desktop",
+    "vtop",
+    "vit",
+    "vit-bhopal",
+    "attendance",
+    "timetable",
+    "cgpa"
+  ],
+  "author": "vtop-bhopal-mcp contributors",
+  "contributors": [
+    "Vikranth Jagdish (original VtopMCP)"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/divyarthjain/vtop-bhopal-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/divyarthjain/vtop-bhopal-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/divyarthjain/vtop-bhopal-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "axios": "^1.7.0",
+    "axios-cookiejar-support": "^5.0.0",
+    "cheerio": "^1.0.0",
+    "express": "^5.1.0",
+    "http-cookie-agent": "^8.0.0",
+    "https-proxy-agent": "^9.0.0",
+    "sharp": "^0.35.5",
+    "tough-cookie": "^5.1.0",
+    "zod": "^3.24.0"
+  },
+  "optionalDependencies": {
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/tough-cookie": "^4.0.5",
+    "dotenv": "^16.6.1",
+    "tsup": "^8.0.0",
+    "tsx": "^4.21.1",
+    "typescript": "^5.7.0"
+  }
+}
