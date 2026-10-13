@@ -177,6 +177,49 @@ See [`.env.example`](../.env.example).
 
 ---
 
+## Debugging tools
+
+Not part of `test:all`. Each exists because something specific broke and
+rewriting it would have been slower. Run them from the repo root.
+
+**Probes — these contact the live portal and need an account**
+
+| Script | What it answers |
+|---|---|
+| `npm run captcha:probe` | How often does VTOP serve a readable image captcha vs Google reCAPTCHA? That ratio is what `RECAPTCHA_REQUIRED` is really about. |
+| `npm run captcha:save` | Saves a live captcha to `test-output/` so it can be read by eye. |
+| `node scripts/leave-probe.ts` | Discovers the hostel-leave endpoints. This is how `leave/1..4` was found — roughly fifty guessed paths under `hostel/*` all returned *"This menu is not available at present!!!"*, because VTOP was correctly reporting paths that do not exist. |
+| `node scripts/login-trace.ts` | Two-phase tracer that pinpoints exactly where the login POST 404s. Defaults to Bhopal; override with `VTOP_BASE_URL`. |
+| `node scripts/calendar-debug.ts` | Dumps the raw academic-calendar HTML so day-order and holiday handling can be checked. |
+| `npm run test:e2e` | Full tool surface against a real account. |
+| `node scripts/multiuser-e2e.ts` | Proves per-token session isolation over HTTP — one user's cached data cannot reach another. |
+| `node scripts/test-published.ts` | Verifies the **published npm package** works when installed. Inert until we actually publish; the package is currently `private`. |
+
+**Raw inspection**
+
+```bash
+npm run raw:call                                    # defaults to get_attendance
+npm run raw:call -- get_marks '{"semesterId":"BL20252605"}'
+```
+
+`raw:call` prints the complete `CallToolResult` — the whole payload the server
+sends, including `structuredContent` — rather than the summary an assistant
+would see. That gap is where a surprising number of bugs hide.
+
+**How to use them**
+
+1. Reproduce the failure through a normal tool call.
+2. Pick the probe that isolates that layer — parser, calendar, captcha or
+   login.
+3. Read its raw output rather than trusting the parsed result. Half the
+   Bhopal-specific bugs were invisible in the parsed form and obvious in the
+   markup.
+4. **Never commit what they write.** `test-output/`, `tmp-caldebug/` and
+   `tmp-leaveprobe/` all contain session-bearing HTML and are gitignored for
+   that reason.
+
+---
+
 ## Related
 
 - [tools.md](tools.md) · [errors.md](errors.md) · [bhopal-vtop.md](bhopal-vtop.md)
