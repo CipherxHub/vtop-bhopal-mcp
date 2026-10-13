@@ -116,6 +116,25 @@ header.bar::before{content:"";position:absolute;top:0;bottom:0;left:50%;
 .bar nav a::after{content:"";position:absolute;left:0;right:100%;bottom:8px;height:1px;background:var(--ink);transition:right .25s ease}.bar nav a:hover::after{right:0}
 .bar nav a.madeby{color:var(--ink)}
 .bar nav a.madeby strong{color:var(--accent);font-weight:600}
+/* Hamburger: desktop never sees it. On a phone the full link row does not
+   fit, so the links collapse into a dropdown panel instead of vanishing. */
+.menu{display:none;border:1px solid var(--line2);background:var(--raise);border-radius:10px;
+  width:42px;height:42px;cursor:pointer;position:relative;flex:0 0 auto;margin-left:auto}
+.menu span{position:absolute;left:11px;right:11px;height:2px;background:var(--ink);border-radius:2px;
+  transition:transform .18s ease,opacity .15s ease}
+.menu span:nth-child(1){top:14px}.menu span:nth-child(2){top:20px}.menu span:nth-child(3){top:26px}
+header.open .menu span:nth-child(1){transform:translateY(6px) rotate(45deg)}
+header.open .menu span:nth-child(2){opacity:0}
+header.open .menu span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
+@media (max-width:560px){
+  .menu{display:block}
+  .bar nav{position:absolute;top:calc(100% - 4px);right:24px;flex-direction:column;align-items:stretch;
+    gap:2px;background:var(--raise);border:1px solid var(--line);border-radius:14px;
+    padding:8px;min-width:230px;display:none;overflow:visible;z-index:30}
+  header.open nav{display:flex}
+  .bar nav a{padding:12px 14px;font-size:15px}
+  .bar nav a::after{display:none}
+}
 
 /* hero */
 .hero{padding:64px 0 8px}
@@ -292,13 +311,14 @@ function layout(o: LayoutOpts): string {
 </head><body><div class="wrap">
 <header class="bar">
   <a class="wordmark" href="/"><span class="dot"></span>VTOP&nbsp;Connector</a>
-  <nav>
+  <nav id="sitenav">
     <a href="#how">How it works</a>
     <a href="#connect">Connect</a>
     <a href="#safe">Safety</a>
     <a class="gh" href="${REPO_URL}" target="_blank" rel="noopener">GitHub&nbsp;↗</a>
     <a class="madeby" href="${AUTHOR_URL}" target="_blank" rel="noopener">built by <strong>CipherxHub</strong>&nbsp;↗</a>
   </nav>
+  <button class="menu" type="button" data-menu aria-expanded="false" aria-controls="sitenav" aria-label="Open menu"><span></span><span></span><span></span></button>
 </header>
 ${o.body}
 <footer class="foot">
@@ -328,6 +348,29 @@ document.addEventListener("click",function(e){
   var t=e.target.closest("[data-toggle]");
   if(t){var i=document.getElementById(t.getAttribute("data-toggle"));
     if(i){var p=i.type==="password";i.type=p?"text":"password";t.textContent=p?"Hide":"Show";}}});
+/* Hamburger menu: flip the panel, keep the label and expanded state honest,
+// collapse after following a link, and let Escape close it with focus back
+// on the button. Closed menus are display:none, so hidden links stay out of
+// the tab order for free. */
+document.addEventListener("click",function(e){
+  var el=e.target&&e.target.closest?e.target.closest("[data-menu],#sitenav a"):null;
+  if(!el)return;
+  var h=el.closest("header");if(!h)return;
+  var mb=h.querySelector("[data-menu]");
+  var setMenu=function(open){
+    h.classList.toggle("open",open);
+    if(mb){mb.setAttribute("aria-expanded",open?"true":"false");
+      mb.setAttribute("aria-label",open?"Close menu":"Open menu");}
+  };
+  if(el.hasAttribute("data-menu")){setMenu(!h.classList.contains("open"));}
+  else{setMenu(false);}
+});
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){var o=document.querySelector("header.open");
+    if(o){o.classList.remove("open");
+      var mb=o.querySelector("[data-menu]");
+      if(mb){mb.setAttribute("aria-expanded","false");mb.setAttribute("aria-label","Open menu");mb.focus();}}}
+});
 /* One-shot submit: registering mints a token, so a double-click must not
    fire a second POST. Disable the button and say so on the label. */
 document.addEventListener("submit",function(e){
