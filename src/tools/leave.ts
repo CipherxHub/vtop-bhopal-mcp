@@ -267,7 +267,40 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
       }
 
       const validation = validateLeave(request, { todayISO: today, knownTypes });
+
+      // On the CONFIRM path, verify the token before touching VTOP at all
+      // (issue #9). Previously this block ran getLeaveFormHtml, the semester
+      // lookup, the calendar, the timetable and the exam schedule, and minted a
+      // fresh token, all before checking whether the caller held a valid one.
+      // One cheap bogus-token call therefore became several upstream requests,
+      // and in exposed single-user mode anyone who could reach the port could
+      // repeat it. Cheap rejection first; the full preview data is only built
+      // for callers who already hold a valid token.
+      const confirming = confirm === true;
+      if (confirming) {
+        if (typeof previewToken !== "string" || !previewToken) {
+          return {
+            request,
+            mode: "CONFIRM REJECTED - nothing submitted",
+            verdict:
+              "confirm=true needs a previewToken from a previous preview call. Nothing was " +
+              "submitted, and no VTOP requests were made. Preview first.",
+          };
+        }
+        const early = verifyPreviewToken(request, previewToken);
+        if (!early.ok) {
+          return {
+            request,
+            mode: "CONFIRM REJECTED - nothing submitted",
+            verdict:
+              `Invalid preview token (${early.reason}). Nothing was submitted, and no VTOP ` +
+              "requests were made - preview again and confirm the exact request you were shown.",
+          };
+        }
+      }
+
       // Server-signed single-use token (issue #6) binding the exact fields.
+      // Only minted on the preview path; a confirm already consumed its token.
       const previewTokenIssued = issuePreviewToken(request);
 
       const semesterId = await client.getCurrentSemesterId();
@@ -375,23 +408,8 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
       }
 
       // --- confirm path: writes ---
-      if (!previewToken) {
-        return {
-          ...preview,
-          mode: "CONFIRM REJECTED - nothing submitted",
-          verdict:
-            "confirm=true needs the previewToken from a preview call. Run apply_leave " +
-            "without confirm first.",
-        };
-      }
-      const check = verifyPreviewToken(request, previewToken);
-      if (!check.ok) {
-        return {
-          ...preview,
-          mode: "CONFIRM REJECTED - nothing submitted",
-          verdict: `Invalid preview token (${check.reason}). Nothing was submitted - preview again and confirm the exact request you were shown.`,
-        };
-      }
+      // The token was already verified above, BEFORE any VTOP request, and
+      // verifying it again here would fail on its own single-use nonce.
       if (!validation.valid) {
         return {
           ...preview,

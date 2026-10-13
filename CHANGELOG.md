@@ -1,10 +1,85 @@
 # Changelog
 
-All notable changes to `@vikranth2005/vtop-mcp` are documented here.
-This project follows [Semantic Versioning](https://semver.org/). While on
-`0.x`, minor/patch bumps may include parser-breaking changes whenever VIT
-alters VTOP's HTML.
+Notable changes to **vtop-bhopal-mcp** are documented here. This project
+follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Hostel leave tools.** get_leave_types, get_leave_status,
+  pply_leave and the get_leave_type_rules diagnostic. Leave types are read
+  from VTOP's live dropdown rather than hard-coded.
+- **Pass eligibility.** check_pass_eligibility reports what you must score to
+  pass, in both the raw-on-paper scale and the weighted 100-point scale, plus
+  which classes or exams a proposed leave would cost you.
+- **Internal mark totals.** get_internal_totals reports marks banked per
+  course with every component still outstanding.
+- **Structured errors.** 13 stable error codes with ordered recovery plans, so
+  a client branches on error.code instead of parsing English.
+- **HTTP connector tests.** 19 offline checks covering routing, auth, CORS, the
+  MCP transport, the landing page and token log-hygiene.
+
+### Fixed
+- **Sessions before a deadline were always counted as zero.**
+  sessionsBefore tested if (weekday && ...), and dayOrderWeekday is null
+  on an ordinary day, so normal weekdays never counted. It now falls back to
+  the natural weekday.
+- **Classes before departure were reported missed on multi-day leaves.**
+  indClassOverlaps computed wholeDay as rom !== to || (...), true for
+  every multi-day leave, which made the boundary guards unreachable. Boundary
+  days now keep their time filtering.
+- **pply_leave reported SUBMITTED even when VTOP rejected the request.** It
+  now distinguishes submitted, rejected, and an unclear response with no new
+  record - never claiming success on silence.
+- **pply_leave ran every VTOP fetch before checking the preview token.** A
+  bogus token on confirm=true cost several upstream requests; it is now
+  rejected before any request is made.
+- **HTTP 404 no longer ends a healthy session.** A wrong route was reported as
+  a dead session, throwing away a good login and starting a pointless captcha
+  loop.
+- **VTOP's HTTP-200 failure pages no longer parse as empty data.** "Menu not
+  available" and "unable to process" are now distinct errors.
+
+### Security
+- **pply_leave confirmation is a server-signed single-use token**, bound to a
+  SHA-256 digest of the exact field values, expiring after 10 minutes. The old
+  FNV-1a fingerprint was client-computable, so it could not prove a preview had
+  been shown.
+- **Authentication fails closed.** With CONNECTOR_SECRET set, a valid token is
+  required unconditionally - previously env credentials satisfied the check, so
+  a .env plus a secret served /mcp to anyone holding the URL.
+- **MCP sessions are bound to their caller's token**, compared in constant time,
+  so knowing a session id is no longer enough to drive it.
+- **Connector tokens expire** (90 days by default), bounding the damage from a
+  leaked URL. Legacy tokens keep working until a sunset date.
+- **CORS is off by default** behind an explicit allowlist. It previously
+  reflected any Origin, letting any visited website call the server.
+- **The HTTP connector binds loopback and trusts only the loopback proxy**, so
+  it is not reachable from the local network and X-Forwarded-* cannot be
+  forged.
+
+### Changed
+- Responses are plain JSON rather than an SSE stream, so tool calls work through
+  Cloudflare Quick Tunnels. The optional server-initiated GET stream is gone;
+  a tool-only server never used it.
+- The landing page covers every MCP client rather than ChatGPT alone, and the
+  registration field enforces the real registration-number shape as you type.
+
+### Known limitations
+- Connector tokens live in a URL. Expiry bounds the exposure; eliminating it
+  needs opaque server-side tokens and a store.
+- The preview-token nonce set is in-process, so a restart invalidates outstanding
+  previews and a multi-replica deployment cannot confirm across replicas.
+- VTOP appears to drop connections from datacentre IP ranges, so the HTTP
+  connector only works from a residential connection.
+
+---
+
+## Inherited changelog
+
+The entries below are the changelog of [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP)
+by Vikranth Jagdish, retained because that code is still part of this
+repository. It documents @vikranth2005/vtop-mcp, a different package.
 ## [Unreleased]
 
 ### Fixed
@@ -12,7 +87,7 @@ alters VTOP's HTML.
   class's period count from its "Day And Timing" cell. The old parser only read
   24-hour `HH:MM` times, so a 12-hour entry whose span crossed noon
   (e.g. an `11:00 AM - 01:40 PM` lab) computed a negative duration and silently
-  fell back to one period — undercounting OD hours. Both clock tokens are now
+  fell back to one period â€” undercounting OD hours. Both clock tokens are now
   parsed with their own AM/PM, and a noon-crossing span is corrected.
 - **Grade history could return empty/garbled data ("didn't parse").**
   `parseGradeHistory` relied on fixed column positions, an exact `tableContent`
@@ -27,20 +102,20 @@ alters VTOP's HTML.
   content (a CGPA value or a course code) are cached now.
 
 ### Added
-- **`calculate_gpa` tool — GPA / CGPA calculator** (VIT 10-point scale). Reports
-  current CGPA, percentage (CGPA×10), and each completed semester's GPA (computed
+- **`calculate_gpa` tool â€” GPA / CGPA calculator** (VIT 10-point scale). Reports
+  current CGPA, percentage (CGPAÃ—10), and each completed semester's GPA (computed
   from grades), computes the GPA of a provided set of grades, projects your CGPA,
   and works out the GPA needed to reach a target CGPA.
-- **`predict_grades` — CGPA grade predictor (implemented but currently INACTIVE,
+- **`predict_grades` â€” CGPA grade predictor (implemented but currently INACTIVE,
   not registered as a tool).** Estimates grades from current marks (absolute for
   lab/soft-skill/project, relative for theory using a user-supplied class
   average). Kept in the codebase (`src/tools/predict-grades.ts`) but disabled for
   now because reliable theory prediction needs the class average VTOP hides;
   re-enable by registering it in `src/server.ts`.
-- **`calculate_od` tool — On-Duty hours calculator.** Totals OD hours per course
+- **`calculate_od` tool â€” On-Duty hours calculator.** Totals OD hours per course
   and for the semester from the per-class attendance detail, against VIT's
   40-hour limit (reports total, per-course, and hours remaining).
-- **`calculate_attendance` tool — attendance / bunk calculator.** Per course:
+- **`calculate_attendance` tool â€” attendance / bunk calculator.** Per course:
   current %, whether you're safe, how many classes you can still skip
   (`bunkBuffer`) or must attend to recover (`classesToRecover`). You're allowed
   only when attendance is STRICTLY above 74.0% (74.0 = debarred, 74.001 = safe);
@@ -50,21 +125,21 @@ alters VTOP's HTML.
   Saturdays / day-orders) and reports how many upcoming classes you can miss or
   must attend to be safe by the deadline. Pass `bunkDates` (e.g. today) to ask
   directly "if I skip these days and attend the rest, am I still safe by the
-  closing date?" — returns a per-course `plannedBunk` (final % + safe/not).
+  closing date?" â€” returns a per-course `plannedBunk` (final % + safe/not).
 - **`get_today_classes` tool.** Today's (or any date's) classes with time and
-  venue, calendar-aware — returns a holiday result on non-instructional days and
+  venue, calendar-aware â€” returns a holiday result on non-instructional days and
   follows the correct day-order on working Saturdays.
-- **`get_calendar` tool — academic-calendar lookup.** Find holidays, events
+- **`get_calendar` tool â€” academic-calendar lookup.** Find holidays, events
   (e.g. TechnoVIT), working Saturdays / day-orders, and instructional days.
   Search a named event with `query`, list a `month`, or get `holidaysOnly`;
   `parseAcademicCalendar` now also captures each day's event/holiday label.
 - **Academic calendar + timetable-grid parsing.** New `VtopClient.getCalendar`
-  (3-step `CalendarPreview` → `getListForSemester` → `processViewCalendar` flow,
+  (3-step `CalendarPreview` â†’ `getListForSemester` â†’ `processViewCalendar` flow,
   cached per session) and `parseAcademicCalendar` / `parseTimetableGrid` parsers.
 - **Optional outbound proxy (`VTOP_PROXY_URL`).** Routes VTOP traffic through an
   HTTP(S) proxy (falls back to `HTTPS_PROXY`). Useful on a datacenter/cloud host,
   where VTOP's risk score tends to serve the unreadable Google reCAPTCHA instead
-  of the OCR-able image captcha — a residential/mobile proxy lowers the score.
+  of the OCR-able image captcha â€” a residential/mobile proxy lowers the score.
 - **ChatGPT connector support.** New `vtop-mcp-http` entrypoint (`src/http.ts`)
   serves the same 17 tools over the MCP **Streamable HTTP** transport so the
   server can be deployed remotely and added as a custom ChatGPT connector.
@@ -79,17 +154,17 @@ alters VTOP's HTML.
   at `GET/POST /register` and receive a personal connector link
   (`https://<host>/mcp/<token>`) where `<token>` is their VTOP credentials
   encrypted with AES-256-GCM (`src/services/crypto.ts`). They add that URL in
-  ChatGPT with **No Auth** — ChatGPT's connector UI has no API-key field, so the
+  ChatGPT with **No Auth** â€” ChatGPT's connector UI has no API-key field, so the
   token travels in the URL path. The `/mcp/:token` route (and `Authorization:
   Bearer <token>` for header-capable clients like Claude Desktop / Cursor)
   authenticates the request and binds the decrypted credentials to that MCP
-  session. Stateless — nothing is stored server-side, so no database is
+  session. Stateless â€” nothing is stored server-side, so no database is
   required. Rotating `CONNECTOR_SECRET` revokes all links. When
   `CONNECTOR_SECRET` is unset the server stays single-user and backward
   compatible (no token required).
 - **Polished registration web page** (`src/web.ts`). The multi-user landing /
   registration page is a hand-designed, responsive, server-rendered experience
-  with an editorial aesthetic — warm paper, a serif display face (Instrument
+  with an editorial aesthetic â€” warm paper, a serif display face (Instrument
   Serif) paired with Inter and JetBrains Mono, hairline rules instead of
   shadows, a single restrained accent, subtle grain texture, dark-mode support,
   password show/hide, and one-click copy of the generated link. In multi-user
@@ -99,13 +174,13 @@ alters VTOP's HTML.
   structured data, `/robots.txt`, `/sitemap.xml`, and a generated `/og.svg`
   social image. The post-submit result page is `noindex` + `no-store` so
   connector links never leak into caches or search engines. No new dependencies
-  and no client-side framework — kept server-rendered for instant loads and
+  and no client-side framework â€” kept server-rendered for instant loads and
   crawlability.
 
 ### Performance
 - **Parallelized the slow multi-request tools.** `calculate_od` fetched each
   course's attendance detail sequentially (~9 round trips) and the academic
-  calendar fetched months one by one — both now run with bounded concurrency
+  calendar fetched months one by one â€” both now run with bounded concurrency
   (`src/services/concurrency.ts`), and the semester auto-detect probes its
   candidate timetables concurrently instead of in series. Timetable HTML is
   cached per semester (it's static) so `calculate_attendance` / `get_today_classes`
@@ -114,7 +189,7 @@ alters VTOP's HTML.
   streamline / auto-approve them (login, logout and get_captcha stay unmarked
   since they change session state).
 - **Multi-user isolation hardened.** All caches are per-`VtopClient` (per connector
-  token) private fields — never module-level — so parallel users never share data.
+  token) private fields â€” never module-level â€” so parallel users never share data.
   The per-token client pool is now bounded by both idle TTL and a hard LRU cap to
   keep memory steady under many users.
 
@@ -162,7 +237,7 @@ alters VTOP's HTML.
   (`vtop-mcp-server`), npx's Windows command-resolution fell into a flaky
   path and failed with "'vtop-mcp-server' is not recognized". With the bin
   named `vtop-mcp` (== basename) npx resolves it directly. The 0.1.2 rename
-  was chasing the wrong cause — the real 0.1.0/0.1.1 bug was the bin file
+  was chasing the wrong cause â€” the real 0.1.0/0.1.1 bug was the bin file
   mode (fixed in 0.1.3 via Linux CI publish). 0.1.4 keeps the 0755 fix and
   restores the correct bin name.
 
@@ -182,7 +257,7 @@ alters VTOP's HTML.
 ### Fixed
 - **Windows `npx` invocation failed** with `'vtop-mcp' is not recognized as
   an internal or external command`. Cause: the `bin` name (`vtop-mcp`) was
-  identical to the scope-stripped package name (`@vikranth2005/vtop-mcp` →
+  identical to the scope-stripped package name (`@vikranth2005/vtop-mcp` â†’
   `vtop-mcp`), which trips an npm-on-Windows command-resolution bug. Renamed
   the bin to `vtop-mcp-server` (distinct from the package basename, matching
   the convention used by `@modelcontextprotocol/server-*`). `npx -y
