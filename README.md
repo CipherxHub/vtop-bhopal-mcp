@@ -212,7 +212,7 @@ Built on earlier work, with each layer credited and sized:
 |---|---|---|---|
 | Original architecture and most parsers | [Vikranth Jagdish](https://github.com/Vikranth-jagdish/VtopMCP) | MIT | ~45% inherited |
 | Bhopal parser adaptations | [divyarthjain](https://github.com/divyarthjain/vtop-bhopal-mcp) | Apache-2.0 | ~247 lines, 5 files |
-| Leave, pass rules, errors, cache | this project | Apache-2.0 | ~2,563 new lines |
+| Leave, pass rules, errors, cache | [CipherxHub](https://github.com/CipherxHub) | Apache-2.0 | ~2,563 new lines |
 
 Behavioural reference only (no code copied): [android-vtop-chennai](https://github.com/therealsujitk/android-vtop-chennai), GPL-3.0.
 

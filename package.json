@@ -62,8 +62,10 @@
     "timetable",
     "cgpa"
   ],
-  "author": "vtop-bhopal-mcp contributors",
+  "author": "CipherxHub",
   "contributors": [
+    "CipherxHub (Bhopal port, leave tools, pass rules, HTTP connector hardening)",
+    "Eklavya Mathur (repo audit: three correctness fixes, three security fixes)",
     "Vikranth Jagdish (original VtopMCP)"
   ],
   "license": "Apache-2.0",

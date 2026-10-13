@@ -26,7 +26,7 @@ divyarthjain              divyarthjain/vtop-bhopal-mcp    Apache-2.0
         │
         │  continued
         ▼
-this project              CipherxHub/vtop-bhopal-mcp      Apache-2.0
+CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
   leave tools, pass-eligibility arithmetic, error taxonomy, cache, keepalive,
   captcha upscaling, structured errors, 136 offline checks
   and all testing against the live portal
@@ -96,7 +96,7 @@ carrying forward upstream `NOTICE` attribution when you include their code — n
 because it was a major contribution. `docs/provenance.md` says so explicitly so
 the credit is neither inflated nor hidden.
 
-### This project — original work
+### CipherxHub — original work
 
 Nine files with no upstream counterpart, 2,563 lines:
 
