@@ -389,6 +389,19 @@ try {
     assert.ok(svg.includes("any assistant"), "og image must match the client-neutral hero");
     assert.doesNotMatch(svg, /ChatGPT/, "og image must not single out one client");
   });
+  await check("hamburger menu exists with honest expanded state", async () => {
+    // On a phone the link row does not fit: links collapse behind a menu
+    // button instead of vanishing. Closed = display:none, so hidden links
+    // stay out of the tab order without extra work.
+    const html = await (await fetch(`${multi.base}/`)).text();
+    assert.ok(html.includes('data-menu'), "menu button must be in the header");
+    assert.ok(html.includes('aria-controls="sitenav"'), "button must point at the nav it toggles");
+    assert.ok(html.includes('id="sitenav"'), "nav must carry the toggled id");
+    assert.ok(html.includes('aria-expanded="false"'), "menu must start collapsed");
+    assert.ok(html.includes('header.open nav'), "collapsed nav must have an open state in CSS");
+    assert.ok(html.includes('"Escape"'), "Escape must close the menu");
+  });
+
   await check("register never echoes the submitted password back", async () => {
     const html = await (
       await fetch(`${multi.base}/register`, {
