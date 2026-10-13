@@ -1,0 +1,266 @@
+# Tool reference
+
+23 tools. **22 read-only, 1 writes.** Argument schemas below are the real ones
+from `src/schemas/index.ts` — this file is generated from the same source the
+server validates against.
+
+---
+
+## Shared arguments
+
+Most per-semester tools take `SemesterInputSchema`:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `semesterId` | `string?` | e.g. `BL20262701`. **Omitted = current semester**, which is almost always what you want. |
+| `refresh` | `boolean?` | Bypass the 60-second cache and re-read from VTOP. Set this when you specifically need to know whether something was *just* updated. |
+
+Results are cached for 60 seconds so follow-up questions are instant. Without
+`refresh`, asking twice in a minute returns the same snapshot.
+
+---
+
+## Attendance
+
+### `get_attendance`
+
+Attended / total / percentage per course.
+
+**Args:** `semesterId?`, `refresh?`
+
+### `calculate_attendance`
+
+The bunk calculator. How many more classes you can skip, or must attend, to hold
+a target percentage.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `semesterId` | `string?` | Default: current semester |
+| `courseCode` | `string?` | One course (case-insensitive). Omit for all. |
+| `targetPercent` | `number?` | 0–100. **Default 74** — VIT requires 75, but 74.x rounds up. |
+| `untilDate` | `string?` | ISO date to project to (e.g. a CAT-2 cutoff). Uses the timetable grid + academic calendar: working days, holidays, working Saturdays, day-orders. |
+| `includeUntilDate` | `boolean?` | Count classes **on** the closing date. Default `true`. |
+| `bunkDates` | `string[]?` | Dates you plan to skip. Requires `untilDate`. Reports whether you'd still be safe by the close if you skip exactly those and attend everything else. |
+
+`untilDate` and `bunkDates` are what make this useful rather than arithmetic —
+without them it can only divide numbers you already have.
+
+### `get_today_classes`
+
+Today's classes (IST), or a given date.
+
+**Args:** `date?` — ISO `YYYY-MM-DD`
+
+Holiday-aware. Knows about Saturdays that follow another weekday's timetable
+("Activities Friday") and working Saturdays that override the weekday.
+
+### `calculate_od`
+
+OD days used this semester against the limit.
+
+**Args:** `semesterId?`, `courseCode?` (omit to total across all courses)
+
+Counts **distinct days**, from the per-class attendance detail.
+
+> **The limit is unconfirmed.** It counts against **8**, based on students'
+> understanding that ~8–9 event ODs are allowed and DSW-approved ODs are
+> unlimited. VTOP does not mark which ODs were DSW-approved, so all of them are
+> counted. Verify with your school or the DSW office.
+
+---
+
+## Marks and exams
+
+### `get_marks`
+
+Internal assessment marks per component — CAT-1, CAT-2, labs, quizzes,
+assignments — with VTOP's own `weightage` column.
+
+**Args:** `semesterId?`, `refresh?`
+
+### `get_internal_totals`
+
+What you've banked this semester, per course, plus everything still to come.
+
+**Args:** `semesterId?`, `refresh?`
+
+> **Read the percentages carefully.** The tool sums VTOP's `weightage` column,
+> which VTOP has already scaled to the internal total. **Marks scored are exact.
+> Percentages are a lower bound.** VTOP omits components that haven't happened
+> yet rather than showing them as zero, and the internal scale is *not* a
+> constant 50 — a course with labs and tutorials listed seven components
+> totalling 65. Treat `scoredSoFar` as the number to trust. The returned `note`
+> repeats this on every call.
+
+### `get_exam_schedule`
+
+CAT-1, CAT-2 and FAT: dates, sessions, times, venues, seats.
+
+**Args:** `semesterId?`, `refresh?`
+
+### `check_pass_eligibility`
+
+What you must score to pass each course — reported in **both scales**, because
+VTOP's marks are printed on paper but the rules are weighted:
+
+- the **raw** scale, out of 200 (CAT-I 20 + CAT-II 20 + TEE 40)
+- the **weighted** scale, on the 100-point course total
+
+The pass rule is 80 of 200. The TEE contributes a base of 40/100, **plus** any
+net shortfall in the CAT pair if the two together fall below 40. Both scales are
+always stated, and the arithmetic conserves the 80 — a figure that satisfied one
+scale would not silently fail the other.
+
+Also reports which classes or exams a proposed leave would cost you.
+
+**Args:** `semesterId?`, `refresh?`
+
+---
+
+## Grades
+
+### `get_semester_grades`
+
+Grades, grade points and GPA for one semester.
+
+**Args:** `semesterId?`, `refresh?`
+
+### `get_grade_history`
+
+CGPA, cumulative credits earned vs required, and every course grouped by exam
+month.
+
+**Args:** none
+
+### `get_curriculum_progress`
+
+Degree progress: credits earned against those required, broken down by category
+and basket.
+
+**Args:** none
+
+> **No grade or GPA predictor exists, deliberately.** VIT awards letter grades
+> *relatively* — against the class average and its spread — and VTOP exposes
+> neither. A prediction would be you supplying a guess and getting a guess back.
+> These tools report only what VTOP actually awarded.
+
+---
+
+## Calendar and profile
+
+### `get_calendar`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `semesterId` | `string?` | Default: current. Events land in the term they fall in, so a Fall event needs the Fall semester id. |
+| `month` | `string?` | `YYYY-MM` |
+| `query` | `string?` | Case-insensitive name search (`technovit`, `pongal`) |
+| `holidaysOnly` | `boolean?` | Only non-instructional days |
+
+### `get_semesters`
+
+All your semesters and their IDs. Use this when you need a specific term.
+
+**Args:** none
+
+### `get_profile`
+
+Name, registration number, application number, programme, branch, school, and
+contact details.
+
+**Args:** none
+
+---
+
+## Hostel leave
+
+Full documentation: **[hostel-leave.md](hostel-leave.md)**.
+
+| Tool | Args | Writes? |
+|---|---|---|
+| `get_leave_types` | none | no — reads VTOP's live dropdown |
+| `get_leave_status` | none | no |
+| `get_leave_type_rules` | `leaveCode?` | no — diagnostic probe |
+| `apply_leave` | see below | **yes** |
+
+### `apply_leave`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `leaveCode` | `string` | **Code, not label.** `SO` `WP` `EP` `SV` `WV` `HT1` `LG1` `EY1` `OG1` |
+| `visitingPlace` | `string` | Required, max 150 chars |
+| `leaveFromDate` | `string` | ISO `YYYY-MM-DD`, not in the past |
+| `fromTime` | `string` | `HH:MM` safest; `6:00 PM`, `1800`, `8.30` all normalise |
+| `leaveToDate` | `string` | ISO `YYYY-MM-DD` |
+| `toTime` | `string` | Same formats. For `OG1` must be ≤ 18:00 — **18:00 allowed, 18:01 refused** |
+| `reason` | `string` | Required |
+| `confirm` | `boolean?` | **Unset on the first call.** `true` + a token to actually submit |
+| `previewToken` | `string?` | From the preview. Required with `confirm: true` |
+
+Two-step: preview returns a `previewToken` (an FNV-1a fingerprint over every
+field) and sends nothing. Submitting requires the identical fields plus that
+token. Edit any field and it's refused. Declares `readOnlyHint: false` so a
+compliant client prompts.
+
+---
+
+## Session
+
+### `session_status`
+
+Whether a session is active, as whom, whether credentials are configured, and —
+importantly — whether **VTOP still honours the session**.
+
+**Args:** none
+
+Call this before assuming you need to log in. A session that died server-side is
+caught here rather than on your next real question.
+
+### `get_captcha`
+
+Fetches VTOP's login captcha and returns the image, upscaled 5× so it stays
+legible. **Read it, then call `login` immediately** — it expires in well under a
+minute.
+
+**Args:** none
+
+If the read is ever missed, ask for a fresh captcha and type the characters
+yourself. That's faster and more reliable than a re-read.
+
+### `login`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `captcha` | `string` | From `get_captcha` |
+| `username` | `string?` | Omit if `VTOP_USERNAME` is set |
+| `password` | `string?` | Omit if `VTOP_PASSWORD` is set |
+
+If login replies that credentials are missing, ask the user for them and call
+again with them.
+
+### `logout`
+
+Signs out and clears the session.
+
+**Args:** none
+
+---
+
+## Notes on session behaviour
+
+**VTOP idles a session out after ~20 minutes** of inactivity — an idle timeout,
+not a fixed lifetime from login. The server therefore touches it every 5 minutes
+by default (`VTOP_KEEPALIVE_MINUTES`), so an open session stays usable
+indefinitely.
+
+**VTOP sometimes serves a Google reCAPTCHA** instead of the text captcha. The
+server reloads the login page a few times until the text captcha appears. If it
+persists, wait — repeated attempts escalate VTOP's risk scoring toward an
+account lockout.
+
+---
+
+## Related
+
+- [errors.md](errors.md) — error codes and what to do about them
+- [development.md](development.md) — how these are implemented and tested
