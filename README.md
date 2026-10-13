@@ -200,7 +200,7 @@ Full reference, including arguments and return shapes: **[docs/tools.md](docs/to
 - **Exam overlap is a warning, not a block.** A clash is sometimes unavoidable and isn't this tool's decision to make.
 - **The OD limit is unconfirmed.** `calculate_od` counts against 8, based on students' understanding that ~8–9 event ODs are allowed and DSW-approved ODs are unlimited. VTOP doesn't mark which were DSW-approved. Verify with your school or the DSW office.
 - **Bunk calculator assumes 75%.** Check your own course rules.
-- **The HTTP connector is tested offline but not yet live.** Its routing, auth, CORS, MCP transport and page content are covered by 18 offline checks, and it refuses every unauthenticated request. But no real login has been run through it against VTOP, so treat that as unproven rather than absent. Details and the safe-deployment recipe: [docs/http-connector.md](docs/http-connector.md).
+- **The HTTP connector is tested, including a live login.** 18 offline checks cover routing, auth, CORS, the MCP transport and page content; it refuses every unauthenticated request; and a full register → captcha → login → real-data pass was run against VTOP on 13 Oct 2026. What remains untested is the *network path* — whether VTOP serves a Google reCAPTCHA to your host's IP range, which is a property of where you deploy. Recipe and security notes: [docs/http-connector.md](docs/http-connector.md).
 
 ---
 
