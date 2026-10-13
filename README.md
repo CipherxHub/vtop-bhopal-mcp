@@ -6,7 +6,9 @@
 ![Node 20.6+](https://img.shields.io/badge/node-%E2%89%A520.6-brightgreen)
 ![MCP](https://img.shields.io/badge/MCP-stdio-purple)
 
-This is an [MCP](https://modelcontextprotocol.io) server. Once it's connected to OpenCode, Claude Code, Claude Desktop, Cursor or any other MCP client, you can just ask:
+This is an [MCP](https://modelcontextprotocol.io) server for **VIT Bhopal's**
+VTOP portal. Once it's connected to OpenCode, Claude Code, Claude Desktop, Cursor
+or any other MCP client, you can just ask:
 
 > *"What's my attendance?"*
 > *"Which classes do I have on Monday?"*
@@ -15,20 +17,30 @@ This is an [MCP](https://modelcontextprotocol.io) server. Once it's connected to
 > *"What do I need to score in the TEE to pass?"*
 > *"Is my hostel leave approved yet?"*
 
-The assistant logs in to VTOP for you, fetches the page, and answers in plain language.
-
-It's a fork of [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP), which was built for VIT Chennai. VIT Bhopal's VTOP runs on the same platform but differs in many places, so this fork reworks the endpoints and parsers for Bhopal and has been tested against the live Bhopal portal.
+The assistant logs in to VTOP for you, fetches the page, and answers in plain
+language. It has been built and tested against the live Bhopal portal.
 
 ---
 
-> ### ⚠️ This is not a read-only server
+> ### Exactly one tool writes to your VTOP account
 >
-> 18 of the 23 tools only read. **One writes: `apply_leave`**, which submits a real
-> hostel leave application to your proctor.
+> Of the 23 tools below, **22 are strictly read-only** — they sign in, fetch a
+> page and report what it says. They cannot change anything.
 >
-> It is built to be safe — it previews before submitting, and a write can never
-> happen without a second, deliberate call — but you should know it exists before
-> you connect it. See [Hostel leave](#hostel-leave) for exactly what it does.
+> **The one exception is `apply_leave`**, which submits a real hostel leave
+> application for your proctor to action. That is the only write in this server.
+>
+> It cannot fire by accident. It is deliberately two-step:
+>
+> 1. A **preview** call validates the request and returns a fingerprint token.
+>    Nothing is sent to VTOP.
+> 2. A **confirm** call must repeat the identical fields *and* that token. Change
+>    any field in between and the submission is refused and must be previewed
+>    again.
+>
+> It also declares `readOnlyHint: false`, so a compliant MCP client raises a
+> permission prompt rather than auto-approving it. See
+> [Hostel leave](#hostel-leave).
 
 ---
 
@@ -40,7 +52,7 @@ It's a fork of [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP), which was
 - [How login works](#how-login-works)
 - [Hostel leave](#hostel-leave)
 - [Privacy and security](#privacy-and-security)
-- [What's different from the Chennai version](#whats-different-from-the-chennai-version)
+- [How VTOP behaves on Bhopal](#how-vtop-behaves-on-bhopal)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [Limitations](#limitations)
@@ -297,26 +309,30 @@ rejects a request, nothing is created and you can apply under another type.
 
 ---
 
-## What's different from the Chennai version
+## How VTOP behaves on Bhopal
 
-VIT Bhopal's VTOP runs on the same platform as Chennai's but differs in the details. This fork changes:
+VTOP's markup is idiosyncratic, and several of these cost real debugging time.
+If you extend this server, they are the things that will bite you:
 
-| Area | Chennai (upstream) | Bhopal (this fork) |
-|---|---|---|
-| Portal | `vtopcc.vit.ac.in` | `vtop.vitbhopal.ac.in` (default) |
-| Semester list | `StudentTimeTableChn` | `StudentTimeTable` (the Chennai page is disabled on Bhopal) |
-| Attendance | separate code / title / slot columns | combined "Course Detail" and "Class Detail" cells; header row has no `<th>` (this used to hang the parser) |
-| Per-class attendance (OD) | `processViewAttendanceDetail(classId, slot)` | `callStudentAttendanceDetailDisplay(semester, regNo, courseId, type)`, plus a summary table before the per-class table |
-| Exam schedule | header row first | an extra "General (Semester)" row above the header |
-| Semester grades | single Credits column | Credits split into L / P / J / C, plus Grading Type and Grand Total |
-| Grade history | grouped by exam month | same, but course codes like `ENG1004` were being mistaken for months; `P` (pass) grades are now kept out of GPA |
-| Profile branch | "Branch" field | taken from the grade-history header (the profile page only has the Class 12 stream) |
-| Calendar | one entry per day | every student group listed per day; only the "General" entry is used. Saturdays marked "Activities Friday" follow Friday's timetable. |
-| Timetable | grid returned empty rows | course cells carry a nested `sessions` array; the grid is merged into it so day and times are populated |
-| Leave | not supported | `hostels/student/leave/1..4`, driven by a `control` parameter rather than separate paths |
-| OD limit | 40 hours per semester | event-OD days ([see note](#limitations)) |
+| Area | What Bhopal actually does |
+|---|---|
+| Portal | `vtop.vitbhopal.ac.in` (default; override with `VTOP_BASE_URL`) |
+| Semester list | `StudentTimeTable`. The Chennai-era path returns "not available" |
+| Attendance | combined "Course Detail" / "Class Detail" cells, and the header row has **no `<th>`** — a positional parser hangs on it, so rows are matched by content |
+| Per-class attendance (OD) | `callStudentAttendanceDetailDisplay(semester, regNo, courseId, type)`, and a summary table precedes the per-class one |
+| Exam schedule | an extra "General (Semester)" row sits **above** the header row |
+| Semester grades | Credits split into L / P / J / C, plus Grading Type and Grand Total |
+| Grade history | grouped by exam month, but course codes like `ENG1004` look exactly like month names — the parser has to tell them apart. `P` (pass) grades are excluded from GPA |
+| Profile branch | the profile page only carries the Class 12 stream, so the branch is read from the grade-history header |
+| Calendar | every student group is listed per day; only the "General" entry is used. Saturdays marked "Activities Friday" follow Friday's timetable, and working Saturdays can override the weekday |
+| Timetable | the grid returns empty day/time cells; each course cell carries a nested `sessions` array, which is merged in so day and times are populated |
+| Leave | `hostels/student/leave/1..4` — one path family driven by a `control` parameter, not separate routes. The form and status views are unreachable until the page shell is loaded first, and VTOP publishes **no duration limits** anywhere |
+| Attendance marks | binary at 75%+ in this semester, banded (95+/90+/<75%) in earlier ones — the rule is inferred per semester from published data, and reported as `unknown` when it can't be |
+| Failure pages | "menu not available" and "unable to process" both arrive as **HTTP 200** and would otherwise parse as empty results |
 
-The Bhopal-specific layouts are covered by offline test fixtures in `scripts/fixtures.ts` and `scripts/*-test.ts`. **Those fixtures use synthetic data only** — see [CONTRIBUTING.md](CONTRIBUTING.md) for the rule and the guard that enforces it.
+All of this is covered by offline fixtures in `scripts/fixtures.ts` and
+`scripts/*-test.ts`. **Those fixtures use synthetic data only** — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the rule and the guard that enforces it.
 
 ---
 
@@ -463,7 +479,7 @@ this to the assistant on every call.
 - **Leave duration limits are partly unknown.** VTOP enforces them server-side and publishes none. Only Home Town ≤ 14 days is confirmed, and that one is checked locally. Guessing the rest would block valid requests, so it isn't attempted.
 - **Exam overlap is a warning, not a block.** If a leave conflicts with an exam, `apply_leave` says so prominently but still allows submission — sometimes a clash is unavoidable, and that isn't the tool's decision to make.
 - **OD limit is unconfirmed.** `calculate_od` counts distinct OD days against **8**, based on students' understanding that about 8–9 event ODs are allowed and DSW-approved ODs are unlimited. VTOP doesn't mark which ODs were DSW-approved, so all OD days are counted. Check the official rule with your school or the DSW office, and if you have a source, please open an issue.
-- **Bunk calculator uses 75%,** treating 74.x% as safe, as upstream does. Check your own course rules.
+- **Bunk calculator uses 75%,** treating 74.x% as safe. Check your own course rules.
 - **Tested on a B.Tech account (Fall Semester 2026-27).** Other programmes may see different layouts.
 - **The multi-user HTTP connector is included but untested on Bhopal.** Review it before exposing it.
 
@@ -471,6 +487,19 @@ this to the assistant on every call.
 
 ## Credits and license
 
-- Original project: [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP) by Vikranth Jagdish (MIT License), itself based on how the [android-vtop-chennai](https://github.com/therealsujitk/android-vtop-chennai) app talks to VTOP.
-- Bhopal adaptations derived via [divyarthjain/vtop-bhopal-mcp](https://github.com/divyarthjain/vtop-bhopal-mcp).
-- This fork is released under the [Apache License 2.0](LICENSE). Code from the original project remains under its MIT terms; see [NOTICE](NOTICE) and [LICENSE-MIT-upstream](LICENSE-MIT-upstream).
+This is a standalone project maintained for VIT Bhopal students. It stands on its
+own: its own issue tracker, its own release history, its own roadmap.
+
+It did not appear from nothing, and the licence terms of the earlier work it
+grew from continue to apply to the code that came from there. That attribution
+is a legal obligation of the MIT licence those projects were released under, not
+a claim that this project is a fork of them:
+
+- [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP) by Vikranth Jagdish (MIT)
+- [divyarthjain/vtop-bhopal-mcp](https://github.com/divyarthjain/vtop-bhopal-mcp), which adapted it toward Bhopal
+- which itself followed how the [android-vtop-chennai](https://github.com/therealsujitk/android-vtop-chennai) app talks to VTOP
+
+This project is released under the [Apache License 2.0](LICENSE). Portions
+derived from the projects above remain under their MIT terms — see [NOTICE](NOTICE)
+for the full attribution chain and [LICENSE-MIT-upstream](LICENSE-MIT-upstream)
+for the licence text those portions carry.
