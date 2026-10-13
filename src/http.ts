@@ -239,6 +239,32 @@ app.set("trust proxy", "loopback");
 app.use(express.json({ limit: "4mb" }));
 app.use(express.urlencoded({ extended: false }));
 
+// Minimal request log: method + path + status + duration. No headers,
+// tokens, cookies, or query strings are logged.
+app.use((req, res, next) => {
+  const started = Date.now();
+  console.error(
+    JSON.stringify({
+      event: "http_request_start",
+      method: req.method,
+      path: req.path,
+      time: new Date().toISOString(),
+    }),
+  );
+  res.on("finish", () => {
+    console.error(
+      JSON.stringify({
+        event: "http_request_finish",
+        method: req.method,
+        path: req.path,
+        status: res.statusCode,
+        durationMs: Date.now() - started,
+      }),
+    );
+  });
+  next();
+});
+
 // CORS is OFF unless VTOP_HTTP_CORS_ORIGIN names the origins to allow. See the
 // CORS_ORIGINS comment above. Reflecting whatever Origin arrives (the previous
 // behaviour) let any website the operator visited make cross-origin calls here,
@@ -269,6 +295,50 @@ function originOf(req: Request): string {
 // this just confirms the process is up — point your keep-warm cron here.
 app.get("/healthz", (_req, res) => {
   res.type("text/plain").set("Cache-Control", "no-store").send("ok");
+});
+
+// Temporary outbound diagnostic: proves whether THIS Render instance can
+// reach VTOP at all, without touching credentials or captcha.
+// Gated by STATS_TOKEN (fallback: KEEPALIVE_TOKEN); wrong/missing → 404.
+// DELETE this route once diagnosed.
+app.get("/debug/vtop/:token", async (req: Request, res: Response) => {
+  const gate = STATS_TOKEN ?? KEEPALIVE_TOKEN;
+  if (!gate || req.params.token !== gate) {
+    res.status(404).type("text/plain").send("Not found");
+    return;
+  }
+  const base =
+    process.env.VTOP_BASE_URL ?? "https://vtop.vitbhopal.ac.in/vtop";
+  const t0 = Date.now();
+  try {
+    const r = await fetch(`${base}/login`, {
+      signal: AbortSignal.timeout(15000),
+      headers: { "User-Agent": "VtopMCP-debug/1.0" },
+    });
+    const html = await r.text();
+    const lower = html.toLowerCase();
+    res.json({
+      ok: true,
+      base,
+      status: r.status,
+      ms: Date.now() - t0,
+      htmlLen: html.length,
+      hasDataImg: /data:image/i.test(html),
+      hasSitekey: /data-sitekey/i.test(html),
+      markers: [
+        /data-sitekey/i.test(html) ? "reCAPTCHA-active" : null,
+        /cloudflare|cf-ray/i.test(lower) ? "cloudflare/WAF" : null,
+        /access denied|forbidden|blocked/i.test(lower) ? "block-text" : null,
+      ].filter(Boolean),
+    });
+  } catch (e) {
+    res.json({
+      ok: false,
+      base,
+      ms: Date.now() - t0,
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
 });
 
 // Bounce the "Connect to ChatGPT" button to ChatGPT via a server redirect.
