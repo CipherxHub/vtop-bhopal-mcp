@@ -1,4 +1,4 @@
-# Render Blueprint — one-click deploy of the VtopMCP ChatGPT connector.
+# Render Blueprint - one-click deploy of the VIT Bhopal VTOP MCP connector.
 # In Render: New + > Blueprint, point it at this repo. Render builds the
 # Dockerfile and gives you a public HTTPS URL; the connector endpoint is
 # that URL + /mcp.
@@ -8,28 +8,70 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    healthCheckPath: /
+    healthCheckPath: /healthz
     autoDeploy: true
     envVars:
-      # Render injects PORT automatically; the server reads it.
+      # ---------------------------------------------------------------------
+      # Bhopal, NOT Chennai. This was pointing at vtopcc.vit.ac.in upstream and
+      # was never updated for this fork - deploying it as shipped would have
+      # scraped VIT Chennai and returned nothing useful.
+      # ---------------------------------------------------------------------
       - key: VTOP_BASE_URL
-        value: https://vtopcc.vit.ac.in/vtop
-      # --- Multi-user mode (optional): set a long random secret to enable
-      # per-user connector links at /register. Leave unset for single-user.
-      # - key: CONNECTOR_SECRET
-      #   generateValue: true
-      # --- Fewer logins (optional): persist encrypted sessions across restarts
-      # so users skip captcha+login after a redeploy / spin-down. Needs
-      # CONNECTOR_SECRET and a Redis URL (e.g. Upstash free tier). See README.
+        value: https://vtop.vitbhopal.ac.in/vtop
+
+      # ---------------------------------------------------------------------
+      # REQUIRED on any platform that routes in from another host.
+      # The server binds 127.0.0.1 by default so that it is NOT reachable from
+      # your home network when you run it behind a local tunnel. Render
+      # connects from outside the container, so without this the deploy
+      # succeeds and every request fails to connect.
+      # ---------------------------------------------------------------------
+      - key: VTOP_HTTP_BIND
+        value: 0.0.0.0
+
+      # ---------------------------------------------------------------------
+      # Multi-user mode: generate a random secret so /register mints per-user
+      # connector tokens. With this set, /mcp REQUIRES a valid token on every
+      # request - which is what you want on a public URL. Without it the
+      # instance is single-user and serves anyone who finds the address.
+      #
+      # Record the generated value. Changing it later invalidates every
+      # connector link at once and everyone re-registers.
+      # ---------------------------------------------------------------------
+      - key: CONNECTOR_SECRET
+        generateValue: true
+
+      # ---------------------------------------------------------------------
+      # CORS is OFF by default, which is correct: Claude's connector calls this
+      # server from Anthropic's cloud and sends no Origin header. Only set this
+      # if you need the browser-based MCP Inspector, e.g.
+      #   VTOP_HTTP_CORS_ORIGIN=http://localhost:6274
+      # ---------------------------------------------------------------------
+      # - key: VTOP_HTTP_CORS_ORIGIN
+      #   value: http://localhost:6274
+
+      # ---------------------------------------------------------------------
+      # OPTIONAL: persist encrypted sessions across restarts so users skip
+      # captcha + login after a spin-down. Free tiers idle out after ~15 min
+      # while VTOP's own session timeout is ~20, so a persisted session can
+      # usually survive the gap.
+      #
+      # NOT READY OUT OF THE BOX: the Dockerfile installs with
+      # `npm ci --omit=dev` and ioredis is not a runtime dependency, so the
+      # import fails and persistence is silently skipped (the server logs a
+      # warning and carries on without it). To use REDIS_URL, add ioredis to
+      # dependencies and rebuild - or run the npm image instead of Docker.
+      # ---------------------------------------------------------------------
       # - key: REDIS_URL
       #   sync: false            # set the value in the Render dashboard (secret)
       # - key: SESSION_KEEPALIVE_MS
       #   value: "600000"        # in-process timer (only fires while awake)
-      # --- Keep sessions alive for days (recommended): set a secret, then point
-      # an external cron at /keepalive/<KEEPALIVE_TOKEN> every ~10 min. Needs REDIS_URL.
+
+      # ---------------------------------------------------------------------
+      # OPTIONAL: secrets-gated operator routes. Without these the routes
+      # return 404, so they are invisible to the public.
+      # ---------------------------------------------------------------------
       # - key: KEEPALIVE_TOKEN
-      #   sync: false            # set the secret value in the Render dashboard
-      # --- Private usage dashboard (optional): set a secret to view stats at
-      # /stats/<STATS_TOKEN> (unique users by reg number). Needs REDIS_URL.
+      #   sync: false            # gates /keepalive/<token> for an external cron
       # - key: STATS_TOKEN
-      #   sync: false            # set the secret value in the Render dashboard
+      #   sync: false            # gates the /stats/<token> usage dashboard
