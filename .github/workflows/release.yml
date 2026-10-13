@@ -1,0 +1,55 @@
+name: Release to npm
+
+# Publishes @vikranth2005/vtop-mcp when a tag matching `v*` is pushed.
+#
+# WHY CI AND NOT `npm publish` FROM A LAPTOP:
+# Windows cannot write the POSIX executable bit into the npm tarball, so a
+# bin published from Windows is mode 0644 and `npx` fails on other Windows
+# machines with "'<bin>' is not recognized". This Linux runner chmod +x's
+# the bin and packs it correctly.
+#
+# AUTH: npm Trusted Publishing (OIDC) — no token/secret, no expiry,
+# automatic provenance. ONE-TIME SETUP on npmjs.com (see README/below).
+#
+# Release flow:
+#   1. bump "version" in package.json + src/server.ts
+#   2. git commit, then: git tag vX.Y.Z && git push --follow-tags
+#   3. this workflow builds, chmods, smoke-tests, publishes with provenance
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for npm OIDC trusted publishing + provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24's bundled npm is >= 11.5.1, which Trusted Publishing (OIDC)
+      # requires. Node 22 ships npm 10.x (fails the trusted-publish
+      # handshake → misleading 404), and `npm i -g npm@latest` to upgrade
+      # in place is flaky (npm replacing itself mid-reify throws
+      # MODULE_NOT_FOUND). Using Node 24 avoids both problems.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm --version
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # Guarantee the bin is executable in the tarball (the whole point).
+      - run: chmod +x dist/index.js
+
+      - run: npm run test:mcp
+
+      - run: npm publish --provenance --access public
