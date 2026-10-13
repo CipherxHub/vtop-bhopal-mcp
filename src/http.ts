@@ -332,11 +332,18 @@ app.get("/debug/vtop/:token", async (req: Request, res: Response) => {
       ].filter(Boolean),
     });
   } catch (e) {
+    const cause = (e as { cause?: unknown })?.cause;
     res.json({
       ok: false,
       base,
       ms: Date.now() - t0,
       error: e instanceof Error ? e.message : String(e),
+      cause:
+        cause instanceof Error
+          ? { message: cause.message, code: (cause as NodeJS.ErrnoException).code ?? null }
+          : cause
+            ? String(cause)
+            : null,
     });
   }
 });
