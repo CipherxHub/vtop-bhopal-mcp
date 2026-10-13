@@ -116,9 +116,7 @@ header.bar::before{content:"";position:absolute;top:0;bottom:0;left:50%;
    least useful link in the bar and the one that forces the wrapping. */
 @media (max-width:560px){.bar nav a.madeby{display:none}}
 .bar nav a:hover{color:var(--ink)}
-.bar nav a::after{content:"";position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--ink);transition:right .25s ease}
-.formhint{color:var(--soft);font-size:13px;line-height:1.45;margin:8px 0 18px;max-width:44em}
-.formhint strong{color:var(--ink);font-weight:600;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}.bar nav a:hover::after{right:0}
+.bar nav a::after{content:"";position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--ink);transition:right .25s ease}.bar nav a:hover::after{right:0}
 .bar nav a.madeby{color:var(--ink)}
 .bar nav a.madeby strong{color:var(--accent);font-weight:600}
 
@@ -324,7 +322,26 @@ document.addEventListener("click",function(e){
   }
   var t=e.target.closest("[data-toggle]");
   if(t){var i=document.getElementById(t.getAttribute("data-toggle"));
-    if(i){var p=i.type==="password";i.type=p?"text":"password";t.textContent=p?"Hide":"Show";}}
+    if(i){var p=i.type==="password";i.type=p?"text":"password";t.textContent=p?"Hide":"Show";}});
+
+  // VTOP registration numbers have a fixed shape: two digits for the batch,
+  // three letters for the branch, then five digits for the sequence. Rather
+  // than explain that under the field, refuse the wrong character in the wrong
+  // position as it is typed - a student cannot end up with a plausible-looking
+  // typo and only discover it when the login fails.
+  //
+  // Kept deliberately simple: strip everything that is not alphanumeric,
+  // uppercase it, cap at 10, then keep only the characters legal at each
+  // offset. Anything that does not belong is discarded rather than refused,
+  // so pasting a formatted or lowercased id still works.
+  var u=e.target.id==="username"?e.target:null;
+  if(u){
+    var raw=u.value.toUpperCase().replace(/[^0-9A-Z]/g,"").slice(0,10);
+    var v=raw.slice(0,2).replace(/[^0-9]/g,"")          // batch: digits
+          +raw.slice(2,5).replace(/[^A-Z]/g,"")         // branch: letters
+          +raw.slice(5,10).replace(/[^0-9]/g,"");       // sequence: digits
+    if(v!==u.value)u.value=v;
+  }
 });
 </script>
 </body></html>`;
@@ -445,8 +462,9 @@ export function landingPage(origin: string, canonicalPath: string): string {
     <p class="lead">Your VTOP credentials are encrypted into the link and never stored.</p>
     <form method="POST" action="/register" autocomplete="off">
       <label class="label" for="username">VTOP username</label>
-      <div class="field"><input id="username" name="username" type="text" placeholder="e.g. 23ABC12345" autocomplete="off" required></div>
-      <p class="formhint">Two digits for the batch, three letters for the branch, then five digits for your number &mdash; <strong>23ABC12345</strong> is the shape, not a real id.</p>
+      <div class="field"><input id="username" name="username" type="text" placeholder="23ABC12345"
+        inputmode="text" maxlength="10" autocapitalize="characters" autocomplete="off" spellcheck="false"
+        pattern="[0-9]{2}[A-Z]{3}[0-9]{5}" title="Two digits, three letters, then five digits." required></div>
       <label class="label" for="password">VTOP password</label>
       <div class="field">
         <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="off" required>

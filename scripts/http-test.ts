@@ -369,6 +369,27 @@ try {
     assert.equal(r.headers.get("cache-control"), "no-store");
   });
 
+  await check("the username field enforces the registration-number shape", async () => {
+    const html = await (await fetch(`${multi.base}/`)).text();
+    const input = html.match(/<input id="username"[^>]*>/)?.[0] ?? "";
+    assert.ok(input, "username field not found");
+    // Backstop for browsers with scripting disabled: the browser refuses a
+    // bad shape on submit rather than letting a typo reach VTOP.
+    assert.match(input, /pattern="\[0-9\]\{2\}\[A-Z\]\{3\}\[0-9\]\{5\}"/);
+    assert.match(input, /maxlength="10"/);
+    // Live filtering is the primary guard; these two are what makes it usable
+    // on a phone keyboard.
+    assert.match(input, /autocapitalize="characters"/);
+    assert.match(input, /spellcheck="false"/);
+    // The in-page handler that drops a character typed in the wrong slot.
+    assert.ok(
+      html.includes('e.target.id==="username"'),
+      "the positional input filter is missing from the page",
+    );
+    // The removed hint line must stay gone.
+    assert.doesNotMatch(html, /Two digits for the batch/);
+  });
+
   // --------------------------------------------------------------- logging --
 
   await check("the connector token never appears in the server's own logs", async () => {
