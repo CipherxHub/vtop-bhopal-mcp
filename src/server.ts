@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "./services/vtop-client.js";
 import type { Credentials } from "./types/index.js";
@@ -21,6 +22,7 @@ import { registerLeaveTools } from "./tools/leave.js";
 export function createServer(
   credentials?: Credentials,
   sharedClient?: VtopClient,
+  previewTokenOwner?: string,
 ): {
   server: McpServer;
   client: VtopClient;
@@ -50,7 +52,10 @@ export function createServer(
   registerTodayClassesTool(server, client);
   registerCalendarTool(server, client);
   registerPassEligibilityTool(server, client);
-  registerLeaveTools(server, client);
+  // Stdio gets an unpredictable process-local owner; HTTP supplies a stable
+  // hash of the authenticated connector token so previews survive a fresh MCP
+  // transport while remaining unusable by another connector user.
+  registerLeaveTools(server, client, previewTokenOwner ?? randomUUID());
   // registerPredictGradesTool(server, client); // inactive — see import note above
 
   return { server, client };

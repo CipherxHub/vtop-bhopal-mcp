@@ -390,18 +390,22 @@ function sweepPreviewNonces(now: number): void {
   }
 }
 
-/** Issue a single-use expiring token binding this exact request. */
-export function issuePreviewToken(req: LeaveRequest): string {
+/** Issue a single-use expiring token binding this exact request and caller. */
+export function issuePreviewToken(req: LeaveRequest, callerKey: string): string {
   const nonce = randomBytes(16).toString("hex");
   const exp = Date.now() + PREVIEW_TTL_MS;
   const mac = createHmac("sha256", previewKey())
-    .update(`${nonce}.${exp}.${fieldDigest(req)}`)
+    .update(`${nonce}.${exp}.${callerKey}.${fieldDigest(req)}`)
     .digest("base64url");
   return `${nonce}.${exp}.${mac}`;
 }
 
 /** Verify a preview token against the request it must confirm. Null = reject. */
-export function verifyPreviewToken(req: LeaveRequest, token: string): { ok: true } | { ok: false; reason: string } {
+export function verifyPreviewToken(
+  req: LeaveRequest,
+  token: string,
+  callerKey: string,
+): { ok: true } | { ok: false; reason: string } {
   const parts = token.split(".");
   if (parts.length !== 3) {
     return { ok: false, reason: "unrecognised preview token — preview again for a fresh one" };
@@ -418,7 +422,7 @@ export function verifyPreviewToken(req: LeaveRequest, token: string): { ok: true
     return { ok: false, reason: "preview token already used — preview again for a fresh one" };
   }
   const expected = createHmac("sha256", previewKey())
-    .update(`${nonce}.${exp}.${fieldDigest(req)}`)
+    .update(`${nonce}.${exp}.${callerKey}.${fieldDigest(req)}`)
     .digest("base64url");
   const a = Buffer.from(mac, "utf8");
   const b = Buffer.from(expected, "utf8");
