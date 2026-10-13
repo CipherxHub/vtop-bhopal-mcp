@@ -308,6 +308,22 @@ check("a multi-day leave misses every class on every covered day", () => {
   assert.equal(r.byCourse.reduce((s, c) => s + c.missed, 0), 3);
 });
 
+check("a multi-day leave keeps boundary filtering on first and last days", () => {
+  // Departs 2026-10-20 17:00, returns 2026-10-22 10:00. Morning class on the
+  // 20th ends before departure so it is not missed; interior 21st is missed.
+  const r = findClassOverlaps(
+    { fromDate: "2026-10-20", fromTime: "17:00", toDate: "2026-10-22", toTime: "10:00" },
+    [
+      ...CLASSES,
+      { date: "2026-10-22", courseCode: "ABC101", courseName: "Course A", startTime: "11:40", endTime: "13:10", venue: "AB02-409" },
+    ],
+  );
+  assert.ok(!r.missed.some((m) => m.date === "2026-10-20"), "20th morning classes survive a 17:00 departure");
+  assert.ok(r.missed.some((m) => m.date === "2026-10-21"), "interior day is fully missed");
+  assert.ok(!r.missed.some((m) => m.date === "2026-10-22"), "11:40 class after a 10:00 return is not missed");
+  assert.ok(r.partialDays.includes("2026-10-20"), "20th reported as partial");
+});
+
 check("classes outside the window are never counted", () => {
   const r = findClassOverlaps(
     { fromDate: "2026-10-22", fromTime: "08:00", toDate: "2026-10-22", toTime: "18:00" },

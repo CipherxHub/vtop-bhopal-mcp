@@ -567,8 +567,10 @@ export function findClassOverlaps(
     const startsOnFirstDay = s.date === leave.fromDate;
     const endsOnLastDay = s.date === leave.toDate;
 
-    // For a multi-day leave, every interior day is lost entirely.
-    const wholeDay = leave.fromDate !== leave.toDate || (!startsOnFirstDay && !endsOnLastDay);
+    // For a multi-day leave, every interior day is lost entirely. Boundary
+    // days keep partial-day filtering: a class before departure or after
+    // return is not missed.
+    const wholeDay = !startsOnFirstDay && !endsOnLastDay;
     const classEnd = minutesOf(s.endTime);
     const classStart = minutesOf(s.startTime);
 

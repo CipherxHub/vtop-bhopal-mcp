@@ -410,13 +410,34 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
       });
 
       const applied = parseLeaveRecords(responseHtml);
+      const vtopMessage = extractMessage(responseHtml);
+      // VTOP rejects bad submits server-side (e.g. over a duration cap) by
+      // returning the form/error page with no new leave row. Never report
+      // success when nothing was created.
+      if (
+        applied.length === 0 &&
+        /not exceed|reject|fail|error|unable|cannot|invalid/i.test(vtopMessage ?? "")
+      ) {
+        return {
+          mode: "SUBMIT REJECTED - nothing created",
+          submitted: request,
+          submittedAt: new Date().toISOString(),
+          vtopResponse: {
+            leaveRecords: applied,
+            message: vtopMessage,
+          },
+          verdict:
+            vtopMessage ??
+            "VTOP did not create a leave — no new record was returned. Nothing was submitted.",
+        };
+      }
       return {
         mode: "SUBMITTED",
         submitted: request,
         submittedAt: new Date().toISOString(),
         vtopResponse: {
           leaveRecords: applied,
-          message: extractMessage(responseHtml),
+          message: vtopMessage,
         },
         nextStep:
           "Call get_leave_status to see the approval state. A leave is not approved until " +
