@@ -30,6 +30,7 @@ import {
 } from "../src/services/leave.js";
 
 let passed = 0;
+const PREVIEW_OWNER = "test-owner-a";
 function check(name: string, fn: () => void) {
   try {
     fn();
@@ -262,31 +263,31 @@ check("the fingerprint is case-insensitive only for the leave code", () => {
 // --- server-signed preview tokens (issue #6) -------------------------------
 check("an issued preview token verifies for the identical request", () => {
   const r = req();
-  const tok = issuePreviewToken(r);
+  const tok = issuePreviewToken(r, PREVIEW_OWNER);
   assert.match(tok, /^[0-9a-f]{32}\.\d+\.[A-Za-z0-9_-]+$/);
-  assert.deepEqual(verifyPreviewToken(r, tok), { ok: true });
+  assert.deepEqual(verifyPreviewToken(r, tok, PREVIEW_OWNER), { ok: true });
 });
 
 check("a preview token is single-use", () => {
   const r = req();
-  const tok = issuePreviewToken(r);
-  assert.deepEqual(verifyPreviewToken(r, tok), { ok: true });
-  const second = verifyPreviewToken(r, tok);
+  const tok = issuePreviewToken(r, PREVIEW_OWNER);
+  assert.deepEqual(verifyPreviewToken(r, tok, PREVIEW_OWNER), { ok: true });
+  const second = verifyPreviewToken(r, tok, PREVIEW_OWNER);
   assert.equal(second.ok, false);
   assert.match((second as { reason: string }).reason, /already used/);
 });
 
 check("a preview token does not verify for changed fields", () => {
-  const tok = issuePreviewToken(req());
-  const altered = verifyPreviewToken(req({ toTime: "17:00" }), tok);
+  const tok = issuePreviewToken(req(), PREVIEW_OWNER);
+  const altered = verifyPreviewToken(req({ toTime: "17:00" }), tok, PREVIEW_OWNER);
   assert.equal(altered.ok, false);
   assert.match((altered as { reason: string }).reason, /does not match/);
 });
 
 check("a forged preview token is rejected", () => {
   const r = req();
-  assert.equal(verifyPreviewToken(r, "forged").ok, false);
-  assert.equal(verifyPreviewToken(r, leaveFingerprint(r)).ok, false);
+  assert.equal(verifyPreviewToken(r, "forged", PREVIEW_OWNER).ok, false);
+  assert.equal(verifyPreviewToken(r, leaveFingerprint(r), PREVIEW_OWNER).ok, false);
 });
 
 // --- class overlap ---------------------------------------------------------
@@ -550,22 +551,28 @@ check("an early return that ends before an exam leaves it clear", () => {
   };
 
   check("confirm=true with no token is rejected, not silently previewed", () => {
-    assert.equal(verifyPreviewToken(req, "").ok, false);
-    assert.equal(verifyPreviewToken(req, "garbage").ok, false);
-    assert.equal(verifyPreviewToken(req, "a.b.c").ok, false);
+    assert.equal(verifyPreviewToken(req, "", PREVIEW_OWNER).ok, false);
+    assert.equal(verifyPreviewToken(req, "garbage", PREVIEW_OWNER).ok, false);
+    assert.equal(verifyPreviewToken(req, "a.b.c", PREVIEW_OWNER).ok, false);
   });
 
   check("a token minted for one request cannot confirm a different one", () => {
-    const tok = issuePreviewToken(req);
-    assert.equal(verifyPreviewToken(req, tok).ok, true, "same fields verify");
+    const tok = issuePreviewToken(req, PREVIEW_OWNER);
+    assert.equal(verifyPreviewToken(req, tok, PREVIEW_OWNER).ok, true, "same fields verify");
     // Single-use: the nonce was consumed by the successful verify.
-    assert.equal(verifyPreviewToken(req, tok).ok, false, "replay refused");
-    const other = issuePreviewToken({ ...req, visitingPlace: "Bhopal" });
+    assert.equal(verifyPreviewToken(req, tok, PREVIEW_OWNER).ok, false, "replay refused");
+    const other = issuePreviewToken({ ...req, visitingPlace: "Bhopal" }, PREVIEW_OWNER);
     assert.equal(
-      verifyPreviewToken(req, other).ok,
+      verifyPreviewToken(req, other, PREVIEW_OWNER).ok,
       false,
       "a token bound to different fields must not confirm",
     );
+  });
+
+  check("a preview token cannot be confirmed by another caller", () => {
+    const tok = issuePreviewToken(req, PREVIEW_OWNER);
+    assert.equal(verifyPreviewToken(req, tok, "test-owner-b").ok, false);
+    assert.equal(verifyPreviewToken(req, tok, PREVIEW_OWNER).ok, true);
   });
 }
 

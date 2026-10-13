@@ -104,7 +104,16 @@ function weekdayOf(iso: string): string {
   return names[d] ?? "";
 }
 
-export function registerLeaveTools(server: McpServer, client: VtopClient): void {
+/**
+ * `previewTokenOwner` is stable for one authenticated caller.  It binds the
+ * preview/confirm handshake to that caller even when their MCP client opens a
+ * fresh transport session for each tool call.
+ */
+export function registerLeaveTools(
+  server: McpServer,
+  client: VtopClient,
+  previewTokenOwner: string,
+): void {
   // --- diagnostic: per-type constraints, read without submitting -----------
   mkJsonTool(
     server,
@@ -287,7 +296,7 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
               "submitted, and no VTOP requests were made. Preview first.",
           };
         }
-        const early = verifyPreviewToken(request, previewToken);
+        const early = verifyPreviewToken(request, previewToken, previewTokenOwner);
         if (!early.ok) {
           return {
             request,
@@ -301,7 +310,7 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
 
       // Server-signed single-use token (issue #6) binding the exact fields.
       // Only minted on the preview path; a confirm already consumed its token.
-      const previewTokenIssued = issuePreviewToken(request);
+      const previewTokenIssued = issuePreviewToken(request, previewTokenOwner);
 
       const semesterId = await client.getCurrentSemesterId();
       const overlap = validation.durationDays

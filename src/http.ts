@@ -496,7 +496,7 @@ async function handleMcpPost(req: Request, res: Response) {
     const client = await getSharedClient(extractToken(req) ?? SINGLE_USER_KEY);
 
     // Bind the authenticated user's credentials to this session's server.
-    const { server } = createServer(auth.credentials, client);
+    const { server } = createServer(auth.credentials, client, caller);
     await server.connect(transport);
   } else {
     res.status(400).json({
