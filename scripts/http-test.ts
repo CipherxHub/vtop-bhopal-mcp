@@ -26,6 +26,7 @@ import assert from "node:assert/strict";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { Script } from "node:vm";
 
 let passed = 0;
 function check(name: string, fn: () => void | Promise<void>) {
@@ -346,7 +347,48 @@ try {
     assert.ok(html.includes("git clone"), "landing page should show the clone instructions instead");
   });
 
-  await check("register never echoes the submitted password back", async () => {
+  await check("landing nav anchors stay reachable on mobile", async () => {
+    // Hiding nav links under 560px stranded small-screen users mid-page;
+    // the bar scrolls horizontally instead.
+    const html = await (await fetch(`${multi.base}/`)).text();
+    for (const a of ['href="#how"', 'href="#connect"', 'href="#safe"']) {
+      assert.ok(html.includes(a), `landing page lost anchor ${a}`);
+    }
+    assert.doesNotMatch(html, /a:not\(\.madeby\)\{display:none\}/, "nav links must not be hidden on small screens");
+  });
+
+  await check("inline page script parses and masks on input", async () => {
+    // The script runs on every page: a syntax error kills copy/show/connect.
+    // Masking must run on keystrokes (input), not just field focus (click).
+    const html = await (await fetch(`${multi.base}/`)).text();
+    const js = (html.match(/<script>([\s\S]*)<\/script>/) || [])[1];
+    assert.ok(js, "landing page should carry its inline script");
+    assert.doesNotThrow(() => new Script(js), "inline script must parse");
+    assert.ok(html.includes('addEventListener("input"'), "reg-number masking must run on input events");
+    assert.ok(html.includes('addEventListener("submit"'), "double-submit guard must be wired");
+  });
+
+  await check("register form is password-manager and keyboard friendly", async () => {
+    const html = await (await fetch(`${multi.base}/`)).text();
+    assert.ok(html.includes('autocomplete="username"'), "username field should invite the password manager");
+    assert.ok(html.includes('autocomplete="current-password"'), "password field should invite the password manager");
+    assert.ok(html.includes('pattern="[0-9]{2}[A-Z]{3}[0-9]{5}"'), "strict reg-number shape pinned");
+    assert.ok(html.includes(":focus-visible"), "keyboard focus must be visible");
+  });
+
+  await check("faint text meets AA contrast in both themes", async () => {
+    // #8c897e on paper was 3.19:1; #6f6d65 on near-black 3.77:1. Both fail
+    // small text, so the values below are pinned, not incidental.
+    const html = await (await fetch(`${multi.base}/`)).text();
+    assert.ok(html.includes("--faint:#6f6c62"), "light faint text must stay at 4.78:1");
+    assert.ok(html.includes("--faint:#8f8c83"), "dark faint text must stay at 5.82:1");
+  });
+
+  await check("og image is client-neutral like the page", async () => {
+    const svg = await (await fetch(`${multi.base}/og.svg`)).text();
+    assert.ok(svg.includes("any assistant"), "og image must match the client-neutral hero");
+    assert.doesNotMatch(svg, /ChatGPT/, "og image must not single out one client");
+  });
     const html = await (
       await fetch(`${multi.base}/register`, {
         method: "POST",
