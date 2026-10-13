@@ -174,6 +174,7 @@ Full reference, including arguments and return shapes: **[docs/tools.md](docs/to
 |---|---|
 | [docs/tools.md](docs/tools.md) | All 23 tools — arguments, returns, read/write |
 | [docs/hostel-leave.md](docs/hostel-leave.md) | Leave types, rules, the two-step confirmation |
+| [docs/http-connector.md](docs/http-connector.md) | Hosting it remotely, and its security model |
 | [docs/errors.md](docs/errors.md) | Error codes, recovery paths, troubleshooting |
 | [docs/bhopal-vtop.md](docs/bhopal-vtop.md) | How Bhopal's markup and endpoints actually behave |
 | [docs/development.md](docs/development.md) | Architecture, tests, adding a tool |
@@ -199,7 +200,7 @@ Full reference, including arguments and return shapes: **[docs/tools.md](docs/to
 - **Exam overlap is a warning, not a block.** A clash is sometimes unavoidable and isn't this tool's decision to make.
 - **The OD limit is unconfirmed.** `calculate_od` counts against 8, based on students' understanding that ~8–9 event ODs are allowed and DSW-approved ODs are unlimited. VTOP doesn't mark which were DSW-approved. Verify with your school or the DSW office.
 - **Bunk calculator assumes 75%.** Check your own course rules.
-- **The multi-user HTTP connector ships untested** on Bhopal. Review it before exposing it.
+- **The HTTP connector is tested offline but not yet live.** Its routing, auth, CORS, MCP transport and page content are covered by 18 offline checks, and it refuses every unauthenticated request. But no real login has been run through it against VTOP, so treat that as unproven rather than absent. Details and the safe-deployment recipe: [docs/http-connector.md](docs/http-connector.md).
 
 ---
 

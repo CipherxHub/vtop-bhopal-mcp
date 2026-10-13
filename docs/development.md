@@ -9,11 +9,12 @@ npm run test:tools     # offline tool checks with a fake VTOP client
 npm run test:login     # offline login handshake against a mock VTOP
 npm run test:exam      # pass-rule arithmetic
 npm run test:leave     # leave validation, fingerprints, exam overlap
+npm run test:http      # HTTP connector: auth, CORS, transport, landing page
 npm run test:privacy   # fixture hygiene guard
-npm run test:all       # everything above, then build + MCP protocol smoke test
+npm run test:all       # everything above, then build + HTTP suite + MCP smoke test
 ```
 
-**117 offline checks.** Every suite except the `e2e` ones needs no VTOP account
+**135 offline checks.** Every suite except the `e2e` ones needs no VTOP account
 and touches no network — deliberate, so the suite is safe in CI.
 
 `npm run build` runs `tsup` only. **Run `typecheck` separately** — a build that
@@ -164,12 +165,15 @@ See [`.env.example`](../.env.example).
 
 ## Known gaps
 
-- **The HTTP connector is inherited and untested on Bhopal.** `src/http.ts` is
-  byte-identical to upstream. Review it before exposing it.
-- **`npm audit` reports 1 critical, 9 high.** The critical (`proxy-addr`) is
-  inside express, which only `http.ts` imports. `dist/index.js` — the path users
-  actually run — never loads it. `npm audit fix` changes 20 packages and is not
-  run automatically; doing so needs a full re-verification.
+- **The HTTP connector has no live test yet.** `scripts/http-test.ts` covers 18
+  offline checks - routing, auth, CORS, the MCP transport, the landing page and
+  log hygiene - but nothing contacts VTOP through it. The stdio path is heavily
+  tested; the HTTP path is not. See [http-connector.md](http-connector.md).
+- **`npm audit` reports 1 critical, 9 high.** All of them are in express, which
+  only `http.ts` imports; `dist/index.js` - the path most users run - never loads
+  them. The critical is `proxy-addr`, reachable only through `http.ts`.
+  `npm audit fix` changes 20 packages and is not run automatically; doing so
+  needs a full re-verification.
 - **Seven of eight leave duration caps are unknown** and will stay unknown until
   VTOP publishes them.
 - **The OD limit is inferred**, not confirmed.
