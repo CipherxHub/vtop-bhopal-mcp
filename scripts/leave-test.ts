@@ -19,11 +19,13 @@ import {
   examClockToMinutes,
   findClassOverlaps,
   findExamOverlaps,
+  issuePreviewToken,
   leaveFingerprint,
   minutesOfDay,
   normaliseExamDate,
   normaliseTime,
   validateLeave,
+  verifyPreviewToken,
   type LeaveRequest,
 } from "../src/services/leave.js";
 
@@ -255,6 +257,36 @@ check("changing ANY field invalidates the fingerprint", () => {
 
 check("the fingerprint is case-insensitive only for the leave code", () => {
   assert.equal(leaveFingerprint(req({ leaveCode: "og1" })), leaveFingerprint(req()));
+});
+
+// --- server-signed preview tokens (issue #6) -------------------------------
+check("an issued preview token verifies for the identical request", () => {
+  const r = req();
+  const tok = issuePreviewToken(r);
+  assert.match(tok, /^[0-9a-f]{32}\.\d+\.[A-Za-z0-9_-]+$/);
+  assert.deepEqual(verifyPreviewToken(r, tok), { ok: true });
+});
+
+check("a preview token is single-use", () => {
+  const r = req();
+  const tok = issuePreviewToken(r);
+  assert.deepEqual(verifyPreviewToken(r, tok), { ok: true });
+  const second = verifyPreviewToken(r, tok);
+  assert.equal(second.ok, false);
+  assert.match((second as { reason: string }).reason, /already used/);
+});
+
+check("a preview token does not verify for changed fields", () => {
+  const tok = issuePreviewToken(req());
+  const altered = verifyPreviewToken(req({ toTime: "17:00" }), tok);
+  assert.equal(altered.ok, false);
+  assert.match((altered as { reason: string }).reason, /does not match/);
+});
+
+check("a forged preview token is rejected", () => {
+  const r = req();
+  assert.equal(verifyPreviewToken(r, "forged").ok, false);
+  assert.equal(verifyPreviewToken(r, leaveFingerprint(r)).ok, false);
 });
 
 // --- class overlap ---------------------------------------------------------

@@ -15,7 +15,7 @@ back:
 
 - the **normalised** values, so what you read is exactly what would be submitted
 - every validation rule that fired, and any warnings
-- a **`previewToken`** — a fingerprint over every submitted field
+- a **`previewToken`** — a server-signed, single-use token binding every submitted field (expires after 10 minutes)
 - what the leave would **cost you**: classes it clashes with, and exams
 
 ```
@@ -29,9 +29,11 @@ back:
 
 Repeat the **identical** fields, plus `confirm: true` and the `previewToken`.
 
-The token is an FNV-1a fingerprint over every field. Change anything between the
+The token is an HMAC over a fingerprint of every field, with a nonce, a
+10-minute expiry, and single-use tracking. Change anything between the
 two calls — a different time, a typo fix, an added reason — and the token no
-longer matches. The submission is **refused** and you must preview again.
+longer matches. Reusing or forging a token is also refused. The submission is
+**refused** and you must preview again.
 
 That is the entire point: it stops "confirm" drifting onto a request you never
 actually saw. The assistant cannot confirm a request that was never shown to you
@@ -66,7 +68,7 @@ later but raise a warning, because a proctor may still query it.
 **Times are normalised before validation**, so `6:00 PM`, `1800`, `18:00` and
 `6.00 pm` are all accepted and all reduce to the same value. The preview and the
 submission therefore always see identical values — which is what makes the
-fingerprint meaningful.
+field binding inside the token meaningful.
 
 **Dates** must be ISO `YYYY-MM-DD` and not in the past. Return cannot precede
 departure.

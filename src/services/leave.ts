@@ -16,6 +16,7 @@
  * leave by a day when a `Date` is formatted in the local zone.
  */
 
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { DAY_OUTING_LATEST_RETURN, LEAVE_MAX_DAYS } from "./constants.js";
 
 /** ISO date, e.g. 2026-10-20. */
@@ -327,6 +328,81 @@ export function leaveFingerprint(req: LeaveRequest): string {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash.toString(16).padStart(8, "0");
+}
+
+/**
+ * Server-signed single-use preview tokens (issue #6).
+ *
+ * The raw fingerprint above is client-computable, so it cannot prove the user
+ * saw the preview. These tokens bind the same fingerprint with an HMAC keyed
+ * by CONNECTOR_SECRET in multi-user mode (or an ephemeral process key in
+ * single-user stdio mode), plus a nonce, expiry, and single-use tracking.
+ */
+const PREVIEW_TTL_MS = 10 * 60 * 1000;
+const usedPreviewNonces = new Map<string, number>();
+let ephemeralPreviewKey: Buffer | null = null;
+
+function previewKey(): Buffer {
+  const secret = process.env.CONNECTOR_SECRET;
+  if (secret && secret.length >= 16) {
+    // Key separation from credential tokens: different purpose string.
+    return createHmac("sha256", secret).update("vtop-mcp-preview-v1").digest();
+  }
+  if (!ephemeralPreviewKey) ephemeralPreviewKey = randomBytes(32);
+  return ephemeralPreviewKey;
+}
+
+function sweepPreviewNonces(now: number): void {
+  if (usedPreviewNonces.size < 1000) {
+    for (const [k, exp] of usedPreviewNonces) {
+      if (exp <= now) usedPreviewNonces.delete(k);
+      if (usedPreviewNonces.size === 0) break;
+    }
+    return;
+  }
+  for (const [k, exp] of usedPreviewNonces) {
+    if (exp <= now) usedPreviewNonces.delete(k);
+  }
+}
+
+/** Issue a single-use expiring token binding this exact request. */
+export function issuePreviewToken(req: LeaveRequest): string {
+  const fingerprint = leaveFingerprint(req);
+  const nonce = randomBytes(16).toString("hex");
+  const exp = Date.now() + PREVIEW_TTL_MS;
+  const mac = createHmac("sha256", previewKey())
+    .update(`${nonce}.${exp}.${fingerprint}`)
+    .digest("base64url");
+  return `${nonce}.${exp}.${mac}`;
+}
+
+/** Verify a preview token against the request it must confirm. Null = reject. */
+export function verifyPreviewToken(req: LeaveRequest, token: string): { ok: true } | { ok: false; reason: string } {
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    return { ok: false, reason: "unrecognised preview token — preview again for a fresh one" };
+  }
+  const [nonce, expStr, mac] = parts as [string, string, string];
+  const exp = Number(expStr);
+  if (!/^[0-9a-f]{32}$/.test(nonce) || !Number.isFinite(exp)) {
+    return { ok: false, reason: "unrecognised preview token — preview again for a fresh one" };
+  }
+  const now = Date.now();
+  sweepPreviewNonces(now);
+  if (now > exp) return { ok: false, reason: "preview token expired — preview again" };
+  if (usedPreviewNonces.has(nonce)) {
+    return { ok: false, reason: "preview token already used — preview again for a fresh one" };
+  }
+  const expected = createHmac("sha256", previewKey())
+    .update(`${nonce}.${exp}.${leaveFingerprint(req)}`)
+    .digest("base64url");
+  const a = Buffer.from(mac, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return { ok: false, reason: "preview token does not match these field values — nothing submitted, preview again" };
+  }
+  usedPreviewNonces.set(nonce, exp);
+  return { ok: true };
 }
 
 // --- exam parsing and overlap ----------------------------------------------
