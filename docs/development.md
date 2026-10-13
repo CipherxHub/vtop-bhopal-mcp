@@ -27,7 +27,7 @@ succeeds can still contain type errors, and that has happened.
 ```
 src/
   index.ts              stdio entry point (what you run)
-  http.ts               multi-user HTTP connector — inherited, UNTESTED on Bhopal
+  http.ts               multi-user HTTP connector (inherited, hardened, live-tested)
   server.ts             MCP server wiring, tool registration
   web.ts                landing page served by the HTTP connector
   schemas/index.ts      every tool's input schema, in one place
@@ -165,10 +165,7 @@ See [`.env.example`](../.env.example).
 
 ## Known gaps
 
-- **The HTTP connector has no live test yet.** `scripts/http-test.ts` covers 18
-  offline checks - routing, auth, CORS, the MCP transport, the landing page and
-  log hygiene - but nothing contacts VTOP through it. The stdio path is heavily
-  tested; the HTTP path is not. See [http-connector.md](http-connector.md).
+- **The HTTP connector is live-tested.** `scripts/http-test.ts` covers 18 offline checks — routing, auth, CORS, the MCP transport, the landing page and log hygiene — and a full register → captcha → login → real-data pass was run against VTOP on 13 Oct 2026. See [http-connector.md](http-connector.md).
 - **`npm audit` reports 1 critical, 9 high.** All of them are in express, which
   only `http.ts` imports; `dist/index.js` - the path most users run - never loads
   them. The critical is `proxy-addr`, reachable only through `http.ts`.

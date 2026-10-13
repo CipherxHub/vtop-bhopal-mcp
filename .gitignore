@@ -18,3 +18,8 @@ tmp-leaveprobe/
 
 # Raw VTOP page dumps (VTOP_DUMP_HTML); contain session-bearing markup
 tmp-vtopdump/
+
+# Artifacts from a manual live check of the HTTP connector. These contain a
+# REAL connector token and the VTOP login captcha — never commit them.
+live-session.json
+live-captcha.jpg

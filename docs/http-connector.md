@@ -29,15 +29,29 @@ Being precise about this, because it determines how much you should trust it.
 | Landing page | client-neutral, no phantom npm install, never echoes the password |
 | Logging | the connector token never reaches stdout/stderr |
 
-**Not yet tested: a real login over HTTP.** The suites never contact VTOP — the
-server only dials out when a tool is called, and these only exercise routing,
-auth and the MCP handshake. The VTOP-facing half of this path (captcha →
-login → a real fetch, over HTTP rather than stdio) has **not** been exercised
-against the live portal.
+**Live-tested against VTOP on 13 Oct 2026.** A full pass was run against the
+local `dist/http.js` with a real account:
 
-That caveat stays until it has been. It is the single most likely thing to
-behave differently from the stdio path, because the cookie jar has to survive
-between `get_captcha` and `login` across what may be separate MCP sessions.
+| Step | Result |
+|---|---|
+| `POST /register` | token minted; **password not echoed in the response** |
+| `initialize` | HTTP 200, `content-type: application/json`, `mcp-session-id` issued |
+| `tools/list` | 23 tools |
+| `session_status` | `credentialsSource: "connector"`, `serverValidated: true` |
+| `get_captcha` | image returned and read by the operator |
+| `login` | success |
+| `get_attendance` | **real data returned** |
+
+The step that mattered most: **the VTOP cookie jar survived from `get_captcha`
+to `login` across MCP sessions.** That is the thing most likely to differ
+between the HTTP and stdio paths, because ChatGPT-style connectors may open a
+fresh MCP session per tool call — and the `VtopClient` is deliberately keyed by
+token rather than by session so that it works. It does.
+
+**Still unproven:** anything that depends on the *network path* rather than the
+code — notably whether VTOP serves a Google reCAPTCHA to your host's IP range.
+That is a property of where you deploy, not of this server. See
+[the datacenter caveat](#the-datacenter-ip-caveat).
 
 ---
 
