@@ -444,7 +444,7 @@ export function landingPage(origin: string, canonicalPath: string): string {
     <p class="lead">Your VTOP credentials are encrypted into the link and never stored.</p>
     <form method="POST" action="/register" autocomplete="off">
       <label class="label" for="username">VTOP username</label>
-      <div class="field"><input id="username" name="username" type="text" placeholder="e.g. 22BCE1234" autocomplete="off" required></div>
+      <div class="field"><input id="username" name="username" type="text" placeholder="e.g. 23MEIXXXXX" autocomplete="off" required></div>
       <label class="label" for="password">VTOP password</label>
       <div class="field">
         <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="off" required>
