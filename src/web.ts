@@ -54,21 +54,25 @@ const linkOutIcon =
 const STYLE = `
 :root{
   color-scheme:light dark;
-  --paper:#f6f4ee; --raise:#fbfaf6; --ink:#1b1a16; --soft:#54524a; --faint:#8c897e;
+  --paper:#f6f4ee; --raise:#fbfaf6; --ink:#1b1a16; --soft:#54524a; --faint:#6f6c62;
   --line:#e1ddd1; --line2:#d5d0c2; --code-bg:#efece2; --code-ink:#2a2820;
   --accent:#bf3d24; --btn-bg:#1b1a16; --btn-ink:#f6f4ee; --ring:rgba(27,26,22,.18);
   --grain:.04;
 }
 @media (prefers-color-scheme:dark){
   :root{
-    --paper:#0c0c0d; --raise:#141416; --ink:#ecebe6; --soft:#a3a097; --faint:#6f6d65;
+    --paper:#0c0c0d; --raise:#141416; --ink:#ecebe6; --soft:#a3a097; --faint:#8f8c83;
     --line:#232326; --line2:#2c2c30; --code-bg:#161618; --code-ink:#e7e6e1;
     --accent:#ff6a4d; --btn-bg:#ecebe6; --btn-ink:#0c0c0d; --ring:rgba(236,235,230,.16);
     --grain:.05;
   }
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+html,body{overflow-x:clip}
+/* Anchored sections (#how, #connect, #safe) must clear the sticky bar when
+   jumped to — otherwise the hamburger menu drops users under the header. */
+section[id]{scroll-margin-top:88px}
 body{
   background:var(--paper);color:var(--ink);
   font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -105,25 +109,41 @@ header.bar::before{content:"";position:absolute;top:0;bottom:0;left:50%;
   border-bottom:1px solid var(--line)}
 .wordmark{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;flex:0 0 auto}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
-/* Nav labels were wrapping onto two lines - "How it works" and the "made by"
-   link especially - which made the bar look ragged. Never break a label: the
-   nav scrolls horizontally on a narrow screen instead. */
+/* Nav labels never break: on a narrow screen the bar scrolls horizontally
+   instead, so every anchor (How / Connect / Safety) stays reachable —
+   hiding links on mobile would strand small-screen users mid-page. */
 .bar nav{display:flex;gap:22px;font-size:13.5px;color:var(--soft);flex-wrap:nowrap;align-items:center;overflow-x:auto;scrollbar-width:none;min-width:0}
 .bar nav::-webkit-scrollbar{display:none}
-.bar nav a{position:relative;padding-bottom:2px;white-space:nowrap;flex:0 0 auto}
+.bar nav a{position:relative;padding:10px 0;white-space:nowrap;flex:0 0 auto}
 @media (max-width:760px){header.bar{gap:12px;padding-top:18px}.bar nav{gap:16px;font-size:13px}}
-/* Below this width the "made by" credit is the first thing to go: it is the
-   least useful link in the bar and the one that forces the wrapping. */
-@media (max-width:560px){.bar nav a.madeby{display:none}}
 .bar nav a:hover{color:var(--ink)}
-.bar nav a::after{content:"";position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--ink);transition:right .25s ease}.bar nav a:hover::after{right:0}
+.bar nav a::after{content:"";position:absolute;left:0;right:100%;bottom:8px;height:1px;background:var(--ink);transition:right .25s ease}.bar nav a:hover::after{right:0}
 .bar nav a.madeby{color:var(--ink)}
 .bar nav a.madeby strong{color:var(--accent);font-weight:600}
+/* Hamburger: desktop never sees it. On a phone the full link row does not
+   fit, so the links collapse into a dropdown panel instead of vanishing. */
+.menu{display:none;border:1px solid var(--line2);background:var(--raise);border-radius:10px;
+  width:42px;height:42px;cursor:pointer;position:relative;flex:0 0 auto;margin-left:auto}
+.menu span{position:absolute;left:11px;right:11px;height:2px;background:var(--ink);border-radius:2px;
+  transition:transform .18s ease,opacity .15s ease}
+.menu span:nth-child(1){top:14px}.menu span:nth-child(2){top:20px}.menu span:nth-child(3){top:26px}
+header.open .menu span:nth-child(1){transform:translateY(6px) rotate(45deg)}
+header.open .menu span:nth-child(2){opacity:0}
+header.open .menu span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
+@media (max-width:560px){
+  .menu{display:block}
+  .bar nav{position:absolute;top:calc(100% - 4px);right:24px;flex-direction:column;align-items:stretch;
+    gap:2px;background:var(--raise);border:1px solid var(--line);border-radius:14px;
+    padding:8px;min-width:230px;display:none;overflow:visible;z-index:30}
+  header.open nav{display:flex}
+  .bar nav a{padding:12px 14px;font-size:15px}
+  .bar nav a::after{display:none}
+}
 
 /* hero */
 .hero{padding:64px 0 8px}
 .hero h1{font-family:"Instrument Serif",Georgia,serif;font-weight:400;
-  font-size:clamp(3rem,9vw,5.4rem);line-height:.96;letter-spacing:-.015em;margin:18px 0 0}
+  font-size:clamp(3rem,9vw,5.4rem);line-height:.96;letter-spacing:-.015em;margin:18px 0 0;text-wrap:balance}
 .hero h1 em{color:var(--accent)}
 .lede{margin-top:22px;max-width:30em;color:var(--soft);font-size:clamp(16px,2.4vw,19px);line-height:1.55}
 
@@ -145,9 +165,13 @@ input[type=text],input[type=password]{width:100%;padding:14px 15px;font-size:16p
   font-family:inherit;letter-spacing:-.01em;transition:border-color .15s,box-shadow .15s}
 input::placeholder{color:var(--faint)}
 input:focus{border-color:var(--ink);box-shadow:0 0 0 4px var(--ring)}
+/* Visible keyboard focus everywhere — inputs keep their ring, everything
+   else gets an accent outline. Without this, keyboard users tab blind. */
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+input:focus-visible{outline:none}
 .toggle{position:absolute;right:7px;top:50%;transform:translateY(-50%);border:0;background:transparent;cursor:pointer;
   font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
-  padding:7px 9px;border-radius:8px}
+  padding:10px 12px;border-radius:8px;min-height:40px}
 .toggle:hover{color:var(--ink)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;margin-top:24px;
   padding:15px 20px;font-size:15px;font-weight:600;letter-spacing:-.01em;cursor:pointer;
@@ -195,13 +219,14 @@ pre{background:var(--code-bg);color:var(--code-ink);border:1px solid var(--line)
   line-height:1.6;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
 .copy{position:absolute;top:9px;right:9px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;
   background:var(--paper);color:var(--soft);border:1px solid var(--line2);border-radius:8px;
-  padding:7px 10px;font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  padding:10px 12px;min-height:40px;font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
   transition:color .15s,border-color .15s}
 .copy:hover{color:var(--ink);border-color:var(--ink)}
 .copy.copied{color:var(--accent);border-color:var(--accent)}
 .copy svg{width:13px;height:13px}
 .ready{display:inline-flex;align-items:center;gap:9px;color:var(--accent);font-family:"JetBrains Mono",monospace;
-  font-size:11.5px;letter-spacing:.22em;text-transform:uppercase}
+  font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;text-wrap:balance}
+@media(max-width:560px){.ready{letter-spacing:.14em}}
 details{margin-top:22px;border-top:1px solid var(--line);padding-top:6px}
 summary{cursor:pointer;font-size:14px;color:var(--soft);padding:14px 0;list-style:none}
 summary:hover{color:var(--ink)}
@@ -225,8 +250,13 @@ footer.foot .links{display:flex;gap:20px;align-items:center}
 footer.foot .by b{color:var(--ink);font-weight:600}
 
 @media(max-width:560px){
-  .bar nav a:not(.madeby){display:none}
   ol.steps .num{font-size:1.6rem}
+}
+/* Motion is decorative here (underline sweeps, button dips), so switch it
+   off wholesale for users who ask for reduced motion. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important}
+  html{scroll-behavior:auto}
 }
 `;
 
@@ -287,13 +317,14 @@ function layout(o: LayoutOpts): string {
 </head><body><div class="wrap">
 <header class="bar">
   <a class="wordmark" href="/"><span class="dot"></span>VTOP&nbsp;Connector</a>
-  <nav>
+  <nav id="sitenav">
     <a href="#how">How it works</a>
     <a href="#connect">Connect</a>
     <a href="#safe">Safety</a>
     <a class="gh" href="${REPO_URL}" target="_blank" rel="noopener">GitHub&nbsp;↗</a>
     <a class="madeby" href="${AUTHOR_URL}" target="_blank" rel="noopener">built by <strong>CipherxHub</strong>&nbsp;↗</a>
   </nav>
+  <button class="menu" type="button" data-menu aria-expanded="false" aria-controls="sitenav" aria-label="Open menu"><span></span><span></span><span></span></button>
 </header>
 ${o.body}
 <footer class="foot">
@@ -322,19 +353,43 @@ document.addEventListener("click",function(e){
   }
   var t=e.target.closest("[data-toggle]");
   if(t){var i=document.getElementById(t.getAttribute("data-toggle"));
-    if(i){var p=i.type==="password";i.type=p?"text":"password";t.textContent=p?"Hide":"Show";}});
-
-  // VTOP registration numbers have a fixed shape: two digits for the batch,
-  // three letters for the branch, then five digits for the sequence. Rather
-  // than explain that under the field, refuse the wrong character in the wrong
-  // position as it is typed - a student cannot end up with a plausible-looking
-  // typo and only discover it when the login fails.
-  //
-  // Kept deliberately simple: strip everything that is not alphanumeric,
-  // uppercase it, cap at 10, then keep only the characters legal at each
-  // offset. Anything that does not belong is discarded rather than refused,
-  // so pasting a formatted or lowercased id still works.
-  var u=e.target.id==="username"?e.target:null;
+    if(i){var p=i.type==="password";i.type=p?"text":"password";t.textContent=p?"Hide":"Show";}}});
+/* Hamburger menu: flip the panel, keep the label and expanded state honest,
+// collapse after following a link, and let Escape close it with focus back
+// on the button. Closed menus are display:none, so hidden links stay out of
+// the tab order for free. */
+document.addEventListener("click",function(e){
+  var el=e.target&&e.target.closest?e.target.closest("[data-menu],#sitenav a"):null;
+  if(!el)return;
+  var h=el.closest("header");if(!h)return;
+  var mb=h.querySelector("[data-menu]");
+  var setMenu=function(open){
+    h.classList.toggle("open",open);
+    if(mb){mb.setAttribute("aria-expanded",open?"true":"false");
+      mb.setAttribute("aria-label",open?"Close menu":"Open menu");}
+  };
+  if(el.hasAttribute("data-menu")){setMenu(!h.classList.contains("open"));}
+  else{setMenu(false);}
+});
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){var o=document.querySelector("header.open");
+    if(o){o.classList.remove("open");
+      var mb=o.querySelector("[data-menu]");
+      if(mb){mb.setAttribute("aria-expanded","false");mb.setAttribute("aria-label","Open menu");mb.focus();}}}
+});
+/* One-shot submit: registering mints a token, so a double-click must not
+   fire a second POST. Disable the button and say so on the label. */
+document.addEventListener("submit",function(e){
+  var f=e.target;
+  if(f&&f.tagName==="FORM"){var b=f.querySelector("button[type=submit]");
+    if(b&&!b.disabled){b.disabled=true;b.style.opacity=".55";b.style.cursor="wait";
+      if(b.firstChild&&b.firstChild.nodeType===3)b.firstChild.textContent="Generating… ";}}
+});
+/* Registration-number masking must run on every keystroke and paste —
+// a click listener only fires when the field gains focus, so typing right
+// after would bypass it entirely. Same normalisation, correct event. */
+document.addEventListener("input",function(e){
+  var u=e.target&&e.target.id==="username"?e.target:null;
   if(u){
     var raw=u.value.toUpperCase().replace(/[^0-9A-Z]/g,"").slice(0,10);
     var v=raw.slice(0,2).replace(/[^0-9]/g,"")          // batch: digits
@@ -454,7 +509,7 @@ export function landingPage(origin: string, canonicalPath: string): string {
   <span class="eyebrow">MCP connector · VIT Bhopal</span>
   <h1>Your VTOP,<br>in <em>any AI assistant</em>.</h1>
   <p class="lede">Connect your VIT Bhopal VTOP once, then just ask: <em>“how many more classes can I skip?”</em> · <em>“what do I need in the TEE to pass?”</em> · <em>“when is my FAT and where?”</em> Real answers from your own VTOP, in plain English — attendance, marks, timetable, exams, grades, CGPA and hostel leave. Works with Claude, ChatGPT, Cursor, OpenCode and anything else that speaks MCP.</p>
-  <span class="ready" style="margin-top:18px"><span class="dot"></span>Setup in under 1 minute · just 3 steps</span>
+  <span class="ready" style="margin-top:18px"><span class="dot"></span>3 steps · under a minute</span>
 </section>
 <section>
   <div class="panel">
@@ -463,11 +518,11 @@ export function landingPage(origin: string, canonicalPath: string): string {
     <form method="POST" action="/register" autocomplete="off">
       <label class="label" for="username">VTOP username</label>
       <div class="field"><input id="username" name="username" type="text" placeholder="23ABC12345"
-        inputmode="text" maxlength="10" autocapitalize="characters" autocomplete="off" spellcheck="false"
+        inputmode="text" maxlength="10" autocapitalize="characters" autocomplete="username" spellcheck="false"
         pattern="[0-9]{2}[A-Z]{3}[0-9]{5}" title="Two digits, three letters, then five digits." required></div>
       <label class="label" for="password">VTOP password</label>
       <div class="field">
-        <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="off" required>
+        <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="current-password" required>
         <button type="button" class="toggle" data-toggle="password">Show</button>
       </div>
       <button class="btn" type="submit">Generate my link ${arrowIcon}</button>
@@ -592,7 +647,7 @@ export function ogImageSvg(): string {
 <circle cx="96" cy="118" r="9" fill="#bf3d24"/>
 <text x="120" y="125" fill="#54524a" font-family="'JetBrains Mono',monospace" font-size="24" letter-spacing="5">MCP CONNECTOR · VIT VTOP</text>
 <text x="92" y="320" fill="#1b1a16" font-family="Georgia,'Times New Roman',serif" font-size="118">Your VTOP, now</text>
-<text x="92" y="438" fill="#1b1a16" font-family="Georgia,'Times New Roman',serif" font-size="118">in <tspan fill="#bf3d24" font-style="italic">ChatGPT</tspan>.</text>
+<text x="92" y="438" fill="#1b1a16" font-family="Georgia,'Times New Roman',serif" font-size="118">in <tspan fill="#bf3d24" font-style="italic">any assistant</tspan>.</text>
 <text x="96" y="540" fill="#54524a" font-family="Georgia,serif" font-size="34">Attendance · Marks · Timetable · Exams · CGPA</text>
 </svg>`;
 }
