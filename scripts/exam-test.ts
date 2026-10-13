@@ -23,6 +23,7 @@ import {
   assessCat,
   assessCourse,
   attendanceRunway,
+  sessionsBefore,
 } from "../src/services/exam-eligibility.js";
 
 let passed = 0;
@@ -516,6 +517,41 @@ check("a runway past the last instructional day has nothing left to attend", () 
   assert.equal(r.mustAttend, null);
   assert.equal(r.percentIfSkipAll, r.percent, "nothing left to skip");
   assert.equal(r.eligibleAtDeadline, true);
+});
+
+// --- sessionsBefore: normal weekdays count, overrides respected ------------
+check("sessionsBefore counts normal weekdays without a day-order override", () => {
+  // 2026-10-12 is a Monday. dayOrderWeekday null means a normal day.
+  const n = sessionsBefore(
+    ["MON"],
+    [{ date: "2026-10-12", instructional: true, dayOrderWeekday: null }],
+    "2026-10-12",
+    "2026-10-19",
+  );
+  assert.equal(n, 1);
+});
+
+check("sessionsBefore respects a working-Saturday day-order override", () => {
+  const n = sessionsBefore(
+    ["MON"],
+    [{ date: "2026-12-12", instructional: true, dayOrderWeekday: "MON" }],
+    "2026-12-12",
+    "2026-12-12",
+  );
+  assert.equal(n, 1);
+});
+
+check("sessionsBefore skips non-instructional and out-of-range days", () => {
+  const n = sessionsBefore(
+    ["MON"],
+    [
+      { date: "2026-10-12", instructional: false, dayOrderWeekday: null },
+      { date: "2026-10-19", instructional: true, dayOrderWeekday: null },
+    ],
+    "2026-10-12",
+    "2026-10-12",
+  );
+  assert.equal(n, 0);
 });
 
 console.log(`\n${passed} checks passed.`);
