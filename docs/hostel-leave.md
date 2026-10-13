@@ -136,6 +136,10 @@ means *unknown*, not *unlimited*.
 and nobody has actioned it yet. Gate-pass flags populate around actual departure,
 not at application time, so `null` there is normal.
 
+For the full record list including approved past leaves, use
+`get_leave_history` — the status view surfaces the current record(s), while
+the history page carries everything VTOP has on file.
+
 Statuses are read from VTOP verbatim. An unrecognised status is passed through
 rather than mapped to a guess.
 

@@ -41,7 +41,7 @@ CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
 
 ### Vikranth Jagdish — VtopMCP (MIT)
 
-`src` grew from 4,623 lines in VtopMCP to 8,283 here. Six files are
+`src` grew from 4,623 lines in VtopMCP to 9,078 here. Five files are
 **byte-for-byte identical** to his:
 
 | File | Lines | What it is |
@@ -49,18 +49,17 @@ CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
 | `src/services/attendance-calc.ts` | 265 | Attendance projection formulas |
 | `src/services/session-store.ts` | 168 | Cookie/session handling |
 | `src/tools/attendance-calc.ts` | 83 | Tool wrapper |
-| `src/tools/calendar.ts` | 54 | Calendar tool |
 | `src/services/concurrency.ts` | 22 | Request pool |
 | `src/tools/curriculum.ts` | 17 | Curriculum tool |
-| **Total** | **609** | |
+| **Total** | **555** | |
 
-Of the 8,283 lines now in `src`, **609 sit inside files that are
-byte-for-byte unchanged** — 7.4%. An earlier version of this file quoted 43.3%
+Of the 9,078 lines now in `src`, **555 sit inside files that are
+byte-for-byte unchanged** — 6.1%. An earlier version of this file quoted 43.3%
 by measuring "lines not added relative to upstream", which counts a modified
 file as if none of it were inherited. That overstates it badly and has been
 replaced with the figure that can be verified directly.
 
-Three files were byte-identical when this fork started and are **no longer**:
+Four files were byte-identical when this fork started and are **no longer**:
 
 - `src/http.ts` and `src/web.ts` — both substantially rewritten (auth now fails
   closed, JSON instead of SSE, CORS off by default, loopback bind; the landing
@@ -68,6 +67,8 @@ Three files were byte-identical when this fork started and are **no longer**:
 - `src/services/crypto.ts` — the AES-256-GCM scheme and the scrypt KDF are
   still his, but token expiry (`iat`/`exp`) was added, so it is no longer a
   copy.
+- `src/tools/calendar.ts` — gained the optional class-group passthrough, so it
+  is no longer a copy.
 
 They remain *derived from* his work and are covered by the MIT notice. Being
 derived is not the same as being a copy, and the distinction is what makes the
@@ -105,30 +106,32 @@ the credit is neither inflated nor hidden.
 
 ### CipherxHub — original work
 
-Ten files with no upstream counterpart, 2,784 lines:
+Twelve files with no upstream counterpart, 3,020 lines:
 
 | File | Lines | What it does |
 |---|---:|---|
-| `src/services/leave.ts` | 643 | Leave validation, 18:00 rule, fingerprints, class + exam overlap |
-| `src/tools/leave.ts` | 486 | The four leave tools |
+| `src/services/leave.ts` | 647 | Leave validation, 18:00 rule, fingerprints, class + exam overlap |
+| `src/tools/leave.ts` | 522 | The five leave tools, incl. full history |
 | `src/services/exam-eligibility.ts` | 453 | Pass arithmetic in both scales, 80-of-200 conservation |
 | `src/services/marks-calc.ts` | 385 | Internal totals, pending components, the lower-bound caveat |
 | `src/tools/pass-eligibility.ts` | 294 | Tool surface for the above |
 | `src/services/errors.ts` | 195 | 13 structured error codes with recovery chains |
+| `src/services/captcha-file.ts` | 134 | Captcha file fallback + opt-in viewer launch |
 | `src/services/captcha-image.ts` | 112 | 5× captcha upscaling |
 | `src/services/cache.ts` | 80 | Bounded TTL cache |
 | `src/services/keepalive.ts` | 69 | Session keepalive |
-| `src/services/captcha-file.ts` | 67 | Captcha file fallback for clients that drop `image` blocks |
-| **Total** | **2,784** | |
+| `src/tools/student-info.ts` | 46 | Profile, acknowledgments, proctor tools |
+| `src/tools/fees-curriculum.ts` | 83 | Fees, baskets and pending-subjects tools |
+| **Total** | **3,020** | |
 
-Plus substantial edits to inherited files: `vtop-parser.ts` (404 lines changed
+Plus substantial edits to inherited files: `vtop-parser.ts` (+719/−167 lines
 against VtopMCP), `vtop-client.ts`, `http.ts` (auth, transport, CORS, bind),
 `web.ts`, `schemas/index.ts`, `types/index.ts` — and the test suite, which grew
 from none to **306 offline checks**.
 
-The two line totals in this file measure different things on purpose. **2,784**
+The two line totals in this file measure different things on purpose. **3,020**
 is the code in files that do not exist upstream at all, so it is original by
-construction. **609** is the code inside files that are byte-for-byte unchanged,
+construction. **555** is the code inside files that are byte-for-byte unchanged,
 so it is inherited by construction. The remainder is inherited code that was
 subsequently edited, and no honest figure describes it — most of it is still his.
 

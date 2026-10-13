@@ -9,6 +9,7 @@ npm run test:tools     # offline tool checks with a fake VTOP client
 npm run test:login     # offline login handshake against a mock VTOP
 npm run test:exam      # pass-rule arithmetic
 npm run test:leave     # leave validation, fingerprints, exam overlap
+npm run test:info      # profile/ack/proctor, baskets + pending, fees, history
 npm run test:http      # HTTP connector: auth, CORS, transport, landing page
 npm run test:privacy   # fixture hygiene guard
 npm run test:all       # everything above, then build + HTTP suite + MCP smoke test

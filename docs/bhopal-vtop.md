@@ -16,6 +16,13 @@ Everything here is covered by offline fixtures in `scripts/fixtures.ts` and
 | Base | `https://vtop.vitbhopal.ac.in/vtop` | Override with `VTOP_BASE_URL` |
 | Semester list | `StudentTimeTable` | The Chennai-era `StudentTimeTableChn` path returns "not available" |
 | Leave | `hostels/student/leave/1..4` | **One path family driven by a `control` parameter**, not separate routes |
+| Leave history | `hostels/student/barcodeleave` | Full history; standard `verifyMenu` handshake, NO `leave/1` priming |
+| Profile (all sections) | `studentsRecord/StudentProfileAllView` | Personal/educational/family/proctor/hostel in one response |
+| Acknowledgments | `admissions/AcknowledgmentView` | Document checklist |
+| Proctor | `proctor/viewProctorDetails` | Same table as the profile proctor section |
+| Curriculum | `academics/common/Curriculum` | Per-category course tables; completed rows carry `bg-success` |
+| Fee receipts | `finance/getStudentReceipts` + `finance/dupReceiptNewP2P` | List, then one receipt's detail HTML. Detail ref is `<no>/8/BPL` plus the list page's `applno`/`regno` hidden fields |
+| Calendar | `academics/common/CalendarPreview` → `getListForSemester` | Semester select fires `getDateForSemesterPreview` (`semSubId`); group select fires `getListForSemester` (`semSubId` + `classGroupId`, 9 groups, `COMB` default) |
 
 ### The leave endpoints, specifically
 
