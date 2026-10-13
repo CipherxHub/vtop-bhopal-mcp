@@ -12,8 +12,7 @@ import type { UserStat } from "./services/session-store.js";
 const BRAND = "VTOP Connector";
 const REPO_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp";
 const AUTHOR_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp";
-const AUTHOR_URL_TEXT = "github.com/CipherxHub/vtop-bhopal-mcp";
-const AUTHOR_NAME = "vtop-bhopal-mcp contributors";
+const AUTHOR_NAME = "CipherxHub";
 // npm publishing is not set up (the package is private), so the site points at
 // the repo and a clone command rather than an install line that would 404.
 
@@ -87,11 +86,27 @@ a{color:inherit;text-decoration:none}
 em{font-style:italic}
 
 /* header */
-header.bar{display:flex;align-items:center;justify-content:space-between;padding:26px 0 0}
-.wordmark{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:600;letter-spacing:-.01em}
+header.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:26px 0 14px;
+  position:sticky;top:0;z-index:20;
+  /* Opaque, so content scrolling underneath never shows through. --paper flips
+     with the colour scheme, so this follows the theme automatically. */
+  background:var(--paper);
+  box-shadow:0 1px 0 var(--line),0 12px 26px -20px rgba(0,0,0,.6);
+  /* Negative bottom margin cancels the extra padding below the bar, so the
+     sticky element doesn't push the hero down by a visible amount. */
+  margin-bottom:-14px}
+.wordmark{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;flex:0 0 auto}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
-.bar nav{display:flex;gap:22px;font-size:13.5px;color:var(--soft)}
-.bar nav a{position:relative;padding-bottom:2px}
+/* Nav labels were wrapping onto two lines - "How it works" and the "made by"
+   link especially - which made the bar look ragged. Never break a label: the
+   nav scrolls horizontally on a narrow screen instead. */
+.bar nav{display:flex;gap:22px;font-size:13.5px;color:var(--soft);flex-wrap:nowrap;align-items:center;overflow-x:auto;scrollbar-width:none;min-width:0}
+.bar nav::-webkit-scrollbar{display:none}
+.bar nav a{position:relative;padding-bottom:2px;white-space:nowrap;flex:0 0 auto}
+@media (max-width:760px){header.bar{gap:12px;padding-top:18px}.bar nav{gap:16px;font-size:13px}}
+/* Below this width the "made by" credit is the first thing to go: it is the
+   least useful link in the bar and the one that forces the wrapping. */
+@media (max-width:560px){.bar nav a.madeby{display:none}}
 .bar nav a:hover{color:var(--ink)}
 .bar nav a::after{content:"";position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--ink);transition:right .25s ease}
 .bar nav a:hover::after{right:0}
@@ -270,12 +285,12 @@ function layout(o: LayoutOpts): string {
     <a href="#connect">Connect</a>
     <a href="#safe">Safety</a>
     <a class="gh" href="${REPO_URL}" target="_blank" rel="noopener">GitHub&nbsp;↗</a>
-    <a class="madeby" href="${REPO_URL}" target="_blank" rel="noopener">made by <strong>vtop-bhopal-mcp contributors</strong>&nbsp;↗</a>
+    <a class="madeby" href="${REPO_URL}" target="_blank" rel="noopener">built by <strong>CipherxHub</strong>&nbsp;↗</a>
   </nav>
 </header>
 ${o.body}
 <footer class="foot">
-  <span class="by">Built by <a href="${REPO_URL}" target="_blank" rel="noopener"><b>${AUTHOR_NAME}</b></a></span>
+  <span class="by">Built by <a href="${REPO_URL}" target="_blank" rel="noopener"><b>CipherxHub</b></a></span>
   <span class="links">
     <a href="${REPO_URL}" target="_blank" rel="noopener">Source ↗</a>
     <a href="${REPO_URL}/blob/main/docs/tools.md" target="_blank" rel="noopener">Tools ↗</a>
@@ -464,17 +479,10 @@ export function resultPage(opts: {
     <button class="copy" data-copy="${safeUrl}">${copyIcon}<span>Copy</span></button>
   </div>
   <a class="btn cta" href="${CHATGPT_OPEN_PATH}" target="_blank" rel="noopener" data-connect="${safeUrl}"><span>Add to ChatGPT</span>${linkOutIcon}</a>
-  <p class="connect-hint">Using Claude, Cursor or something else? The same link works — pick your app below.</p>
+  <p class="connect-hint">Using Claude, Cursor or something else? The same link works — pick your app above.</p>
 </section>
 ${connectSteps()}
 <section id="how" style="padding-top:8px">
-  <div class="kicker"><h2 class="serif">Setting up ChatGPT specifically</h2><span class="line"></span></div>
-  <ol class="steps">
-    <li><span class="num">01</span><div><h3>Use a paid ChatGPT plan</h3><p>This needs ChatGPT <strong>Go</strong>, <strong>Plus</strong>, or <strong>Pro</strong>. It does not work on the free plan.</p></div></li>
-    <li><span class="num">02</span><div><h3>Turn on Developer mode</h3><p>Open ChatGPT and follow this path:</p><div class="navpath"><span>Profile</span><span>Settings</span><span>Apps</span><span>Developer mode = ON</span></div></div></li>
-    <li><span class="num">03</span><div><h3>Create the app</h3><p>Click <strong>Create</strong>. Then:</p><p style="margin-top:6px">• <strong>Name:</strong> VTOP Bhopal MCP<br>• <strong>MCP Server URL:</strong> paste the link from the top of this page<br>• <strong>Authentication:</strong> No&nbsp;Auth</p><p style="margin-top:6px">Click Create to save.</p></div></li>
-    <li><span class="num">04</span><div><h3>Ask a question</h3><p>Open a new chat and turn on <strong>VTOP Bhopal MCP</strong>. Then tell it to use the tool — for example:</p><p style="margin-top:6px"><em>“Use the VTOP Bhopal MCP tool to get my attendance.”</em></p><p style="margin-top:6px;color:var(--soft);font-size:14px">Tip: mention <strong>VTOP Bhopal MCP</strong> by name. Just asking “what's my attendance?” may not trigger the tool on its own.</p></div></li>
-  </ol>
   <a class="backlink" href="/register">${arrowIcon} Generate another link</a>
 </section>`;
   return layout({
