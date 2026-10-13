@@ -63,13 +63,13 @@
     "Vikranth Jagdish (original VtopMCP)"
   ],
   "license": "Apache-2.0",
-  "homepage": "https://github.com/divyarthjain/vtop-bhopal-mcp#readme",
+  "homepage": "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/divyarthjain/vtop-bhopal-mcp.git"
+    "url": "git+https://github.com/YOUR-USERNAME/vtop-bhopal-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/divyarthjain/vtop-bhopal-mcp/issues"
+    "url": "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp/issues"
   },
   "publishConfig": {
     "access": "public"

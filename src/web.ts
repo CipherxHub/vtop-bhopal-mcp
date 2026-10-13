@@ -10,12 +10,12 @@
 import type { UserStat } from "./services/session-store.js";
 
 const BRAND = "VTOP Connector";
-const REPO_URL = "https://github.com/Vikranth-jagdish/VtopMCP";
-const AUTHOR_URL = "https://www.vikranth.space/labs/vtop-mcp";
-const AUTHOR_URL_TEXT = "vikranth.space/labs/vtop-mcp";
-const AUTHOR_NAME = "Vikranth";
-const NPM_PKG = "@vikranth2005/vtop-mcp";
-const NPM_URL = "https://www.npmjs.com/package/@vikranth2005/vtop-mcp";
+const REPO_URL = "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp";
+const AUTHOR_URL = "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp";
+const AUTHOR_URL_TEXT = "github.com/YOUR-USERNAME/vtop-bhopal-mcp";
+const AUTHOR_NAME = "vtop-bhopal-mcp contributors";
+const NPM_PKG = "vtop-bhopal-mcp";
+const NPM_URL = "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp#readme";
 
 // Deep link straight to ChatGPT's Apps → Developer-mode page. ChatGPT has no
 // install/prefill API and same-origin rules forbid us from touching its tab,
@@ -240,7 +240,7 @@ function layout(o: LayoutOpts): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(o.title)}</title>
 <meta name="description" content="${escapeHtml(o.description)}">
-<meta name="keywords" content="VTOP, VIT, ChatGPT, MCP, connector, attendance, timetable, CGPA, VIT Chennai, vtopcc">
+<meta name="keywords" content="VTOP, VIT Bhopal, ChatGPT, MCP, connector, attendance, timetable, marks, CGPA, hostel leave, vtop">
 <meta name="author" content="${AUTHOR_NAME}">
 <link rel="canonical" href="${escapeHtml(canonical)}">
 <meta name="robots" content="${o.noindex ? "noindex,nofollow" : "index,follow"}">
@@ -269,7 +269,7 @@ function layout(o: LayoutOpts): string {
     <a href="#how">How it works</a>
     <a href="#safe">Safety</a>
     <a class="gh" href="${REPO_URL}" target="_blank" rel="noopener">GitHub&nbsp;↗</a>
-    <a class="madeby" href="${AUTHOR_URL}" target="_blank" rel="noopener">made by <strong>vikranth.space</strong>&nbsp;↗</a>
+    <a class="madeby" href="${AUTHOR_URL}" target="_blank" rel="noopener">made by <strong>vtop-bhopal-mcp contributors</strong>&nbsp;↗</a>
   </nav>
 </header>
 ${o.body}
@@ -335,7 +335,7 @@ function safety(): string {
 function buildYourOwn(): string {
   return `<section id="build">
   <div class="kicker"><h2 class="serif">Use it in your own project</h2><span class="line"></span></div>
-  <p style="color:var(--soft);max-width:46em">VtopMCP is free and open source. Download the npm package and wire it into your own personal project, or read the full write-up on Vikranth's site.</p>
+  <p style="color:var(--soft);max-width:46em">VTOP Bhopal MCP is free and open source, built and tested against the live VIT Bhopal portal. Clone it, run the build, and wire it into your own project.</p>
   <div class="codebox" style="margin-top:14px">
     <pre>npm install ${NPM_PKG}</pre>
     <button class="copy" data-copy="npm install ${NPM_PKG}">${copyIcon}<span>Copy</span></button>
@@ -410,8 +410,8 @@ export function resultPage(opts: {
   <ol class="steps">
     <li><span class="num">01</span><div><h3>Use a paid ChatGPT plan</h3><p>This needs ChatGPT <strong>Go</strong>, <strong>Plus</strong>, or <strong>Pro</strong>. It does not work on the free plan.</p></div></li>
     <li><span class="num">02</span><div><h3>Turn on Developer mode</h3><p>Open ChatGPT and follow this path:</p><div class="navpath"><span>Profile</span><span>Settings</span><span>Apps</span><span>Developer mode = ON</span></div></div></li>
-    <li><span class="num">03</span><div><h3>Create the app</h3><p>Click <strong>Create</strong>. Then:</p><p style="margin-top:6px">• <strong>Name:</strong> VtopMCP<br>• <strong>MCP Server URL:</strong> paste the link from the top of this page<br>• <strong>Authentication:</strong> No&nbsp;Auth</p><p style="margin-top:6px">Click Create to save.</p></div></li>
-    <li><span class="num">04</span><div><h3>Ask a question</h3><p>Open a new chat and turn on <strong>VtopMCP</strong>. Then tell it to use the tool — for example:</p><p style="margin-top:6px"><em>“Use the VtopMCP tool to get my attendance.”</em></p><p style="margin-top:6px;color:var(--soft);font-size:14px">Tip: mention <strong>VtopMCP</strong> by name. Just asking “what's my attendance?” may not trigger the tool on its own.</p></div></li>
+    <li><span class="num">03</span><div><h3>Create the app</h3><p>Click <strong>Create</strong>. Then:</p><p style="margin-top:6px">• <strong>Name:</strong> VTOP Bhopal MCP<br>• <strong>MCP Server URL:</strong> paste the link from the top of this page<br>• <strong>Authentication:</strong> No&nbsp;Auth</p><p style="margin-top:6px">Click Create to save.</p></div></li>
+    <li><span class="num">04</span><div><h3>Ask a question</h3><p>Open a new chat and turn on <strong>VTOP Bhopal MCP</strong>. Then tell it to use the tool — for example:</p><p style="margin-top:6px"><em>“Use the VTOP Bhopal MCP tool to get my attendance.”</em></p><p style="margin-top:6px;color:var(--soft);font-size:14px">Tip: mention <strong>VTOP Bhopal MCP</strong> by name. Just asking “what's my attendance?” may not trigger the tool on its own.</p></div></li>
   </ol>
   <details>
     <summary>Using Claude Desktop or Cursor instead?</summary>
