@@ -146,6 +146,13 @@ claude mcp add vtop -s user -- node --env-file=/path/to/vtop-bhopal-mcp/.env /pa
 > `VTOP_CAPTCHA_DIR`), so you can always open it. Never let the model guess the
 > characters — a wrong guess is a real failed login attempt, and VTOP locks
 > accounts after repeated failures.
+>
+> **Fully hands-off in Codex:** set `VTOP_CAPTCHA_OPEN=1` in your `.env` and the
+> server opens the captcha in an image viewer (Photos / Preview / `xdg-open`) the
+> moment it is written. You read it off the screen and type it back; the whole
+> exchange stays inside the one MCP session, so the login lands where the
+> assistant can use it. Local stdio only — on a shared HTTP connector every call
+> would pop a window on whoever is at the keyboard.
 
 Then **start a new chat** (tools load at session start) and ask something.
 

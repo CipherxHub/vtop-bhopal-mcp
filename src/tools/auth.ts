@@ -3,7 +3,7 @@ import { VtopClient } from "../services/vtop-client.js";
 import type { Credentials } from "../types/index.js";
 import { LoginSchema, EmptySchema } from "../schemas/index.js";
 import { mkJsonTool, errorResult } from "./_helpers.js";
-import { saveCaptchaFile } from "../services/captcha-file.js";
+import { saveCaptchaFile, openCaptchaImage } from "../services/captcha-file.js";
 import { VtopError, type VtopErrorBody } from "../services/errors.js";
 
 /** Rejected captcha attempts in a row before we hand the problem to the user. */
@@ -49,13 +49,22 @@ export function registerAuthTools(
           // a way to reach it. The image block stays first for clients that
           // render it — this is additive, not a replacement.
           const captchaFile = saveCaptchaFile(match[1], match[2]);
+          const opened = captchaFile ? openCaptchaImage(captchaFile) : false;
           const text = captchaFile
-            ? "Captcha retrieved. The image is attached above AND saved to a file.\n\n" +
-              `If you can see the attached image, read it and call \`login\`. If NO image is ` +
-              `rendered above, your client does not display image content blocks: open ` +
-              `${captchaFile} and read that instead. NEVER guess the characters - a wrong ` +
-              `guess is a real failed login attempt against the student's account, and VTOP ` +
-              `locks accounts after repeated failures. The image expires in 30-60 seconds.`
+            ? opened
+              ? "Captcha retrieved and OPENED IN AN IMAGE VIEWER on the user's screen, and " +
+                `saved to ${captchaFile}.\n\n` +
+                "If the user is present, ask them to read the characters off that window and " +
+                "give them to you, then call `login` immediately. If you can see an attached " +
+                `image above, read it yourself instead. NEVER guess the characters - a wrong ` +
+                "guess is a real failed login attempt against the student's account and VTOP " +
+                "locks accounts after repeated failures. The image expires in 30-60 seconds."
+              : "Captcha retrieved. The image is attached above AND saved to a file.\n\n" +
+                `If you can see the attached image, read it and call \`login\`. If NO image is ` +
+                `rendered above, your client does not display image content blocks: open ` +
+                `${captchaFile} and read that instead. NEVER guess the characters - a wrong ` +
+                `guess is a real failed login attempt against the student's account, and VTOP ` +
+                `locks accounts after repeated failures. The image expires in 30-60 seconds.`
             : "Captcha retrieved (attached above). If no image is rendered, your client does " +
               "not display image content blocks and the file save failed - ask the user to fetch " +
               "it themselves rather than guessing. NEVER guess the characters.";
@@ -71,12 +80,15 @@ export function registerAuthTools(
                 captchaReturned: true,
                 mimeType: match[1],
                 captchaFile,
+                openedInViewer: opened,
                 imageRendered: false,
                 instructions: {
                   canReadImage: "Read the attached image, then call login immediately.",
-                  cannotSeeImage:
-                    "Your client is not rendering image content blocks. Open `captchaFile` " +
-                    "and read the characters from it, or ask the user to open it. Do not guess.",
+                  cannotSeeImage: opened
+                    ? "The image has been opened in a viewer on the user's screen. Ask them to " +
+                      "read it and give you the characters, then call login."
+                    : "Your client is not rendering image content blocks. Open `captchaFile` " +
+                      "and read the characters from it, or ask the user to open it. Do not guess.",
                   expiresInSeconds: "30-60",
                   neverGuess: true,
                 },

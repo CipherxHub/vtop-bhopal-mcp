@@ -106,6 +106,18 @@ follows [Semantic Versioning](https://semver.org/).
   not run.
 - **281 offline checks across 12 suites** (was 280).
 
+- **EXPERIMENTAL: `VTOP_CAPTCHA_OPEN=1` opens the captcha for you.** Opt-in. On
+  clients that render no MCP `image` blocks AND whose model will not open a local
+  file to look at one - Codex - the round trip otherwise needs you to find the
+  file yourself. With this set, the server launches a viewer (Photos / Preview /
+  `xdg-open`) as soon as the JPEG is written, and the tool response tells the
+  model the image is already on screen so it asks you to read it rather than
+  repeating the path. Off by default: it spawns a GUI process on the host, which
+  is wrong for a shared HTTP connector where every call would throw a window on
+  whoever is at the keyboard. Requires a desktop session, so it is a no-op over
+  SSH or in a container, and it degrades to the file path rather than failing
+  login.
+
 ### Known limitations
 - Connector tokens live in a URL. Expiry bounds the exposure; eliminating it
   needs opaque server-side tokens and a store.
