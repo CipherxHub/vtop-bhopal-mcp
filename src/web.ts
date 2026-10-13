@@ -88,13 +88,18 @@ em{font-style:italic}
 /* header */
 header.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:26px 0 14px;
   position:sticky;top:0;z-index:20;
-  /* Opaque, so content scrolling underneath never shows through. --paper flips
-     with the colour scheme, so this follows the theme automatically. */
-  background:var(--paper);
-  box-shadow:0 1px 0 var(--line),0 12px 26px -20px rgba(0,0,0,.6);
-  /* Negative bottom margin cancels the extra padding below the bar, so the
-     sticky element doesn't push the hero down by a visible amount. */
+  /* No background on the element itself: it sits inside the max-width column,
+     so painting it here covers only that column and the bar reads as a
+     floating box. The full-bleed backdrop is the ::below. */
+  background:transparent;
   margin-bottom:-14px}
+/* Break the backdrop out of the centred column to the full viewport width, so
+   the sticky bar spans edge to edge while the links stay aligned with the
+   content. border-bottom rather than box-shadow: a spread shadow paints a
+   visible dark halo over the textured page. */
+header.bar::before{content:"";position:absolute;top:0;bottom:0;left:50%;
+  transform:translateX(-50%);width:100vw;background:var(--paper);z-index:-1;
+  border-bottom:1px solid var(--line)}
 .wordmark{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;flex:0 0 auto}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
 /* Nav labels were wrapping onto two lines - "How it works" and the "made by"
