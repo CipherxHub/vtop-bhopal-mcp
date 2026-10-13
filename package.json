@@ -19,7 +19,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20.6.0"
   },
   "scripts": {
     "build": "tsup && node -e \"const fs=require('fs');fs.chmodSync('dist/index.js',0o755);fs.chmodSync('dist/http.js',0o755)\"",
@@ -63,13 +63,13 @@
     "Vikranth Jagdish (original VtopMCP)"
   ],
   "license": "Apache-2.0",
-  "homepage": "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp#readme",
+  "homepage": "https://github.com/CipherxHub/vtop-bhopal-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR-USERNAME/vtop-bhopal-mcp.git"
+    "url": "git+https://github.com/CipherxHub/vtop-bhopal-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp/issues"
+    "url": "https://github.com/CipherxHub/vtop-bhopal-mcp/issues"
   },
   "publishConfig": {
     "access": "public"
