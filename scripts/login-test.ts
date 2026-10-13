@@ -343,6 +343,34 @@ async function main() {
     await close();
   });
 
+  // --- post-logout login is not broken -------------------------------------
+  // Verified live: after a real logout, GET /vtop/login carrying the dead
+  // JSESSIONID answers HTTP 404 instead of minting a fresh session, so a
+  // client that kept its cookie jar broke every later login with UPSTREAM 404
+  // until the process restarted. The mock reproduces that (dead sessions 404
+  // /login and /prelogin/setup), so without the jar reset in logout() and
+  // initSession() this test fails exactly the way production did.
+  await check("a fresh captcha works immediately after logout", async () => {
+    const { mock, client, close } = await loggedInClient();
+    await client.logout();
+    const img = await client.getCaptcha();
+    assert.match(img, /^data:image\/png;base64,[A-Za-z0-9+/=]+$/);
+    assert.ok(
+      mock.log.some((l) => l === "GET /vtop/login"),
+      "expected a fresh prelogin handshake after logout",
+    );
+    await close();
+  });
+  await check("a full login works immediately after logout", async () => {
+    const { client, close } = await loggedInClient();
+    await client.logout();
+    await client.getCaptcha();
+    await client.login(TEST_USER, TEST_PASS, TEST_CAPTCHA);
+    assert.equal(client.isAuthenticated, true);
+    assert.equal(client.registrationNumber, TEST_REGNO);
+    await close();
+  });
+
   // ------------------------------------------------------- error taxonomy shape
   await check("NOT_AUTHENTICATED carries an ordered recovery plan", () => {
     const body = new VtopError("NOT_AUTHENTICATED", "gone").toBody();

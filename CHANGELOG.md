@@ -118,6 +118,15 @@ follows [Semantic Versioning](https://semver.org/).
   SSH or in a container, and it degrades to the file path rather than failing
   login.
 
+- **Logout no longer breaks the next login.** After a real logout, VTOP answers
+  a `GET /login` that still carries the dead `JSESSIONID` with HTTP 404 instead of
+  minting a fresh session — verified live twice. The client kept its cookie jar,
+  so every later login failed with `UPSTREAM 404` until the process restarted.
+  `logout()` now drops the jar, and the prelogin handshake starts cookieless too,
+  which also covers persisted sessions VTOP has since expired. The mock reproduces
+  VTOP's dead-session 404s, with regression tests that fail without the fix.
+- **294 offline checks across 12 suites** (was 292).
+
 ### Known limitations
 - Connector tokens live in a URL. Expiry bounds the exposure; eliminating it
   needs opaque server-side tokens and a store.

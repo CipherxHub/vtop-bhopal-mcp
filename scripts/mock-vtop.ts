@@ -68,6 +68,15 @@ interface Session {
   armed: boolean;
   authenticated: boolean;
   dataCalls: number;
+  /**
+   * Set by /processLogout on an authenticated session. Real VTOP invalidates
+   * the JSESSIONID server-side and then answers GET /login (and POST
+   * /prelogin/setup) that still carry the dead cookie with HTTP 404 instead of
+   * minting a fresh session — verified live after a real logout. A client that
+   * keeps the jar therefore breaks every later login until it drops the
+   * cookies; only a cookieless request mints a new session.
+   */
+  dead: boolean;
 }
 
 export class MockVtop {
@@ -91,7 +100,7 @@ export class MockVtop {
   private sessionFor(id: string): Session {
     let s = this.sessions.get(id);
     if (!s) {
-      s = { armed: false, authenticated: false, dataCalls: 0 };
+      s = { armed: false, authenticated: false, dataCalls: 0, dead: false };
       this.sessions.set(id, s);
     }
     return s;
@@ -161,13 +170,25 @@ export class MockVtop {
     setCookie: string[] = [],
   ): void {
     // --- portal selector: mints the session cookie, no captcha here ---
+    // A request carrying a dead (logged-out) JSESSIONID gets VTOP's real
+    // answer: HTTP 404, not a fresh session. Only a cookieless request mints.
     if (path === "/vtop/login" && method === "GET") {
+      if (session.dead) {
+        res.writeHead(404, { "Content-Type": "text/html" });
+        res.end("<html><body>Not Found</body></html>");
+        return;
+      }
       this.send(res, this.page("VTOP Login", csrfHtml()), 200, setCookie);
       return;
     }
 
     // --- prelogin handshake: arms the session and returns the captcha page ---
     if (path === "/vtop/prelogin/setup" && method === "POST") {
+      if (session.dead) {
+        res.writeHead(404, { "Content-Type": "text/html" });
+        res.end("<html><body>Not Found</body></html>");
+        return;
+      }
       session.armed = true;
       session.authenticated = false;
       this.send(res, this.loginPageHtml(), 200, setCookie);
@@ -242,6 +263,10 @@ export class MockVtop {
     // --- authenticated endpoints ---
     if (path.startsWith("/vtop/")) {
       if (path === "/vtop/processLogout") {
+        // Real VTOP invalidates the session server-side; afterwards the same
+        // JSESSIONID is dead and even GET /login 404s with it. Mark it so the
+        // mock reproduces that — an unauthenticated logout is a no-op.
+        if (session.authenticated) session.dead = true;
         session.authenticated = false;
         this.send(res, this.page("Bye", `<div>logged out</div>`), 200, setCookie);
         return;
