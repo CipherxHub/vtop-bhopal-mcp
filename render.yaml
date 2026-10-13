@@ -8,6 +8,17 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
+    # VTOP is hosted in India (both A records are Indian: 182.76.192.117 and
+    # 14.99.16.249 in ap-south-1). Render's default region is Ohio, and from
+    # there every request to VTOP is dropped - the TCP connection never
+    # completes, 120 seconds of silence, while the same request from a
+    # residential Indian connection returns in ~1.2s.
+    #
+    # Singapore egress is far closer. This tests whether the drop is
+    # geographic rather than a blanket "datacenter IPs" policy. If it still
+    # times out from here, the block is IP-class based and no cloud region will
+    # help - see docs/http-connector.md.
+    region: singapore
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
@@ -18,6 +29,11 @@ services:
       # ---------------------------------------------------------------------
       - key: VTOP_BASE_URL
         value: https://vtop.vitbhopal.ac.in/vtop
+
+      # Fail reasonably fast. VTOP answers in ~1.2s from a working network, so
+      # a long timeout only makes a blocked connection painful to diagnose.
+      - key: VTOP_TIMEOUT_MS
+        value: "60000"
 
       # ---------------------------------------------------------------------
       # REQUIRED on any platform that routes in from another host.
