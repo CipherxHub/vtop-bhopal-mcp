@@ -16,7 +16,7 @@
  * leave by a day when a `Date` is formatted in the local zone.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { DAY_OUTING_LATEST_RETURN, LEAVE_MAX_DAYS } from "./constants.js";
 
 /** ISO date, e.g. 2026-10-20. */
@@ -334,13 +334,35 @@ export function leaveFingerprint(req: LeaveRequest): string {
  * Server-signed single-use preview tokens (issue #6).
  *
  * The raw fingerprint above is client-computable, so it cannot prove the user
- * saw the preview. These tokens bind the same fingerprint with an HMAC keyed
- * by CONNECTOR_SECRET in multi-user mode (or an ephemeral process key in
- * single-user stdio mode), plus a nonce, expiry, and single-use tracking.
+ * saw the preview. These tokens bind a SHA-256 digest of the exact field
+ * values with an HMAC keyed by CONNECTOR_SECRET in multi-user mode (or an
+ * ephemeral process key in single-user stdio mode), plus a nonce, expiry,
+ * and single-use tracking. The FNV fingerprint stays for display only — the
+ * MAC binds the full field digest, so grinding a 32-bit collision gains
+ * nothing.
  */
 const PREVIEW_TTL_MS = 10 * 60 * 1000;
+const MAX_PREVIEW_NONCES = 10000;
 const usedPreviewNonces = new Map<string, number>();
 let ephemeralPreviewKey: Buffer | null = null;
+
+/** Exact field values the token binds, in a stable order. */
+function canonicalLeave(req: LeaveRequest): string {
+  return [
+    req.leaveCode.trim().toUpperCase(),
+    req.visitingPlace.trim(),
+    req.leaveFromDate.trim(),
+    req.fromTime.trim(),
+    req.leaveToDate.trim(),
+    req.toTime.trim(),
+    req.reason.trim(),
+  ].join(" ");
+}
+
+/** SHA-256 digest of the bound fields — collision-grinding is infeasible. */
+function fieldDigest(req: LeaveRequest): string {
+  return createHash("sha256").update(canonicalLeave(req), "utf8").digest("hex");
+}
 
 function previewKey(): Buffer {
   const secret = process.env.CONNECTOR_SECRET;
@@ -353,25 +375,27 @@ function previewKey(): Buffer {
 }
 
 function sweepPreviewNonces(now: number): void {
-  if (usedPreviewNonces.size < 1000) {
-    for (const [k, exp] of usedPreviewNonces) {
-      if (exp <= now) usedPreviewNonces.delete(k);
-      if (usedPreviewNonces.size === 0) break;
-    }
-    return;
-  }
   for (const [k, exp] of usedPreviewNonces) {
     if (exp <= now) usedPreviewNonces.delete(k);
+    if (usedPreviewNonces.size === 0) return;
+  }
+  // Cap growth within the TTL window: evict oldest-first past the cap.
+  // Inserts only happen on successful verifies (each costing a real submit),
+  // so reaching the cap means abnormal burst traffic, not normal use.
+  if (usedPreviewNonces.size >= MAX_PREVIEW_NONCES) {
+    for (const [k] of usedPreviewNonces) {
+      usedPreviewNonces.delete(k);
+      if (usedPreviewNonces.size < MAX_PREVIEW_NONCES) break;
+    }
   }
 }
 
 /** Issue a single-use expiring token binding this exact request. */
 export function issuePreviewToken(req: LeaveRequest): string {
-  const fingerprint = leaveFingerprint(req);
   const nonce = randomBytes(16).toString("hex");
   const exp = Date.now() + PREVIEW_TTL_MS;
   const mac = createHmac("sha256", previewKey())
-    .update(`${nonce}.${exp}.${fingerprint}`)
+    .update(`${nonce}.${exp}.${fieldDigest(req)}`)
     .digest("base64url");
   return `${nonce}.${exp}.${mac}`;
 }
@@ -394,7 +418,7 @@ export function verifyPreviewToken(req: LeaveRequest, token: string): { ok: true
     return { ok: false, reason: "preview token already used — preview again for a fresh one" };
   }
   const expected = createHmac("sha256", previewKey())
-    .update(`${nonce}.${exp}.${leaveFingerprint(req)}`)
+    .update(`${nonce}.${exp}.${fieldDigest(req)}`)
     .digest("base64url");
   const a = Buffer.from(mac, "utf8");
   const b = Buffer.from(expected, "utf8");

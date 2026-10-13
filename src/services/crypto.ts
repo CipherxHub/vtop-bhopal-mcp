@@ -11,8 +11,11 @@ const TOKEN_VERSION = 2;
 /** Days a newly issued connector token stays valid. Override with CONNECTOR_TOKEN_TTL_DAYS. */
 function tokenTtlMs(): number {
   const days = Number(process.env.CONNECTOR_TOKEN_TTL_DAYS ?? 90);
-  if (!Number.isFinite(days) || days <= 0) return 90 * 24 * 3600 * 1000;
-  return Math.min(days, 3650) * 24 * 3600 * 1000;
+  const sane = !Number.isFinite(days) || days <= 0 ? 90 : Math.min(days, 3650);
+  if (sane > 365) {
+    console.error(`VtopMCP: CONNECTOR_TOKEN_TTL_DAYS=${sane} — tokens live over a year; prefer 90 or less.`);
+  }
+  return sane * 24 * 3600 * 1000;
 }
 
 let cachedKey: Buffer | null = null;
@@ -91,8 +94,8 @@ export function encryptCredentials(creds: Credentials): string {
 
 /**
  * Reverse of encryptCredentials. Throws if the token is malformed, forged, or
- * expired. Legacy v1 tokens (no exp) are still accepted so a deploy does not
- * log out every user at once — they should re-register for an expiring token.
+ * expired. Legacy v1 tokens (no exp) are accepted until CONNECTOR_V1_SUNSET so
+ * a deploy does not log out every user at once — re-register for a v2 token.
  */
 export function decryptCredentials(token: string): Credentials {
   const obj: unknown = JSON.parse(decryptString(token));
@@ -106,10 +109,21 @@ export function decryptCredentials(token: string): Credentials {
   }
   const { username, password } = obj as Credentials;
   const exp = (obj as { exp?: unknown }).exp;
-  if (exp !== undefined) {
-    if (typeof exp !== "number" || !Number.isFinite(exp) || Date.now() > exp) {
-      throw new Error("Connector token has expired. Re-register at /register to get a new one.");
+  if (exp === undefined) {
+    const sunset = Date.parse(process.env.CONNECTOR_V1_SUNSET ?? "2027-01-01T00:00:00Z");
+    if (!warnedV1) {
+      warnedV1 = true;
+      console.error(
+        "VtopMCP: legacy v1 connector token used (no expiry) — re-register at /register for an expiring v2 token.",
+      );
     }
+    if (Number.isFinite(sunset) && Date.now() > sunset) {
+      throw new Error("Legacy v1 connector token retired. Re-register at /register to get a new one.");
+    }
+  } else if (typeof exp !== "number" || !Number.isFinite(exp) || Date.now() > exp) {
+    throw new Error("Connector token has expired. Re-register at /register to get a new one.");
   }
   return { username, password };
 }
+
+let warnedV1 = false;
