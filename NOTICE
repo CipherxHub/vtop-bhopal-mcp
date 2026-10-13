@@ -13,15 +13,17 @@ This project incorporates and adapts code from the following earlier works.
    Copyright (c) 2026 Vikranth Jagdish
    Licensed under the MIT License.
 
-   Approximately 45% of the source in this repository derives from this project.
-   Seven files are retained byte-for-byte (the session store, the attendance
-   projection calculators and their tool wrapper, the AES-256-GCM connector
-   tokens, the calendar and curriculum tools, and the request pool).
+   Approximately 43% of the source in this repository derives from this project.
+   Six files are retained byte-for-byte (the session store, the attendance
+   projection calculators and their tool wrapper, the calendar and curriculum
+   tools, and the request pool).
 
-   src/http.ts and src/web.ts were byte-for-byte when this work began and are no
-   longer: both have since been substantially rewritten. They remain derived
-   from this project and are covered by the MIT notice below, but they are not
-   copies. src/services/tls.ts differs only in its documentation comment.
+   Three files were byte-for-byte when this work began and are no longer.
+   src/http.ts and src/web.ts have been substantially rewritten. In
+   src/services/crypto.ts the AES-256-GCM scheme and the scrypt KDF are
+   unchanged, but token expiry was added. src/services/tls.ts differs only in
+   its documentation comment. All remain derived from this project and are
+   covered by the MIT notice below, but they are not copies.
 
    The MIT License requires that its copyright notice and permission notice be
    included in all copies or substantial portions of the Software. That notice is

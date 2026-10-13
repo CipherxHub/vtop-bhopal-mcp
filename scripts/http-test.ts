@@ -390,6 +390,37 @@ try {
     assert.doesNotMatch(html, /Two digits for the batch/);
   });
 
+  await check(
+    "a session id cannot be replayed under a different token (issue #5)",
+    async () => {
+      // The transport is bound to sha256(token) and compared with
+      // timingSafeEqual. Knowing a session id must not be enough to drive it -
+      // otherwise one user can impersonate another by obtaining the id, and
+      // Mcp-Session-Id is a response header a browser client can read.
+      const other = await (
+        await fetch(`${multi.base}/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: DUMMY_USER + "_B", password: DUMMY_PASS }),
+        })
+      ).text();
+      const otherToken = other.match(/\/mcp\/([A-Za-z0-9_-]{40,})/)?.[1];
+      assert.ok(otherToken, "could not mint a second token");
+      assert.notEqual(otherToken, token, "the two tokens must differ");
+
+      const r = await fetch(`${multi.base}/mcp/${otherToken}`, {
+        method: "POST",
+        headers: mcpHeaders(sessionId), // victim's session id, attacker's token
+        body: JSON.stringify({ jsonrpc: "2.0", id: 99, method: "tools/list" }),
+      });
+      assert.equal(
+        r.status,
+        400,
+        "a session id replayed under another token must be refused",
+      );
+    },
+  );
+
   // --------------------------------------------------------------- logging --
 
   await check("the connector token never appears in the server's own logs", async () => {

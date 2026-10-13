@@ -3,7 +3,7 @@
 Where every part of this codebase came from, with sizes measured by diffing
 against both upstream projects rather than estimated.
 
-Short version: roughly **45% is inherited from Vikranth Jagdish's VtopMCP**, about
+Short version: roughly **43% is inherited from Vikranth Jagdish's VtopMCP**, about
 **247 lines** come from divyarthjain's Bhopal adaptations, and about **2,563
 lines** were written for this project — plus all of the live testing that
 produced the Bhopal-specific behaviour encoded in them.
@@ -28,7 +28,7 @@ divyarthjain              divyarthjain/vtop-bhopal-mcp    Apache-2.0
         ▼
 CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
   leave tools, pass-eligibility arithmetic, error taxonomy, cache, keepalive,
-  captcha upscaling, structured errors, 136 offline checks
+  captcha upscaling, structured errors, 280 offline checks
   and all testing against the live portal
 ```
 
@@ -41,7 +41,7 @@ CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
 
 ### Vikranth Jagdish — VtopMCP (MIT)
 
-`src` grew from 4,623 lines in VtopMCP to 7,987 here. Seven files are
+`src` grew from 4,623 lines in VtopMCP to 8,211 here. Six files are
 **byte-for-byte identical** to his:
 
 | File | Lines | What it is |
@@ -49,24 +49,29 @@ CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
 | `src/services/attendance-calc.ts` | 265 | Attendance projection formulas |
 | `src/services/session-store.ts` | 168 | Cookie/session handling |
 | `src/tools/attendance-calc.ts` | 83 | Tool wrapper |
-| `src/services/crypto.ts` | 77 | AES-256-GCM connector tokens |
 | `src/tools/calendar.ts` | 54 | Calendar tool |
 | `src/services/concurrency.ts` | 22 | Request pool |
 | `src/tools/curriculum.ts` | 17 | Curriculum tool |
-| **Total** | **686** | |
+| **Total** | **609** | |
 
-Across all of `src`, **3,574 of 7,987 lines (44.7%)** are byte-identical to
+Across all of `src`, **3,552 of 8,211 lines (43.3%)** are byte-identical to
 VtopMCP.
 
-`src/http.ts` and `src/web.ts` were byte-identical when this fork started and
-are **no longer** — the HTTP connector has been substantially rewritten (auth
-now fails closed, JSON instead of SSE, CORS off by default, loopback bind) and
-the landing page rewritten for multiple clients. They remain *derived from* his
-work and are still covered by the MIT notice, but they are no longer copies.
+Three files were byte-identical when this fork started and are **no longer**:
 
-`src/services/tls.ts` also dropped out of the identical list: only its
-doc-comment changed, to record that VIT Bhopal's certificate chain verifies
-unaided and the bundled intermediate is a no-op there. The executable code is
+- `src/http.ts` and `src/web.ts` — both substantially rewritten (auth now fails
+  closed, JSON instead of SSE, CORS off by default, loopback bind; the landing
+  page rewritten for multiple clients).
+- `src/services/crypto.ts` — the AES-256-GCM scheme and the scrypt KDF are
+  still his, but token expiry (`iat`/`exp`) was added, so it is no longer a
+  copy.
+
+They remain *derived from* his work and are covered by the MIT notice. Being
+derived is not the same as being a copy, and the distinction is what makes the
+percentage above meaningful.
+
+`src/services/tls.ts` also differs, but only in its doc-comment, which records
+that VIT Bhopal's certificate chain verifies unaided. The executable code is
 unchanged.
 
 This code cannot be claimed as original here. It is his expression — the
@@ -116,7 +121,7 @@ Nine files with no upstream counterpart, 2,563 lines:
 Plus substantial edits to inherited files: `vtop-parser.ts` (404 lines changed
 against VtopMCP), `vtop-client.ts`, `http.ts` (auth, transport, CORS, bind),
 `web.ts`, `schemas/index.ts`, `types/index.ts` — and the test suite, which grew
-from none to **136 offline checks**.
+from none to **280 offline checks**.
 
 ---
 

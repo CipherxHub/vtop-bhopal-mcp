@@ -14,7 +14,7 @@ npm run test:privacy   # fixture hygiene guard
 npm run test:all       # everything above, then build + HTTP suite + MCP smoke test
 ```
 
-**136 offline checks.** Every suite except the `e2e` ones needs no VTOP account
+**280 offline checks.** Every suite except the `e2e` ones needs no VTOP account
 and touches no network — deliberate, so the suite is safe in CI.
 
 `npm run build` runs `tsup` only. **Run `typecheck` separately** — a build that
@@ -165,7 +165,7 @@ See [`.env.example`](../.env.example).
 
 ## Known gaps
 
-- **The HTTP connector is live-tested.** `scripts/http-test.ts` covers 19 offline checks — routing, auth, CORS, the MCP transport, the landing page and log hygiene — and a full register → captcha → login → real-data pass was run against VTOP on 13 Oct 2026. See [http-connector.md](http-connector.md).
+- **The HTTP connector is live-tested.** `scripts/http-test.ts` covers 20 offline checks — routing, auth, CORS, the MCP transport, the landing page and log hygiene — and a full register → captcha → login → real-data pass was run against VTOP on 13 Oct 2026. See [http-connector.md](http-connector.md).
 - **`npm audit` reports 1 critical, 9 high.** All of them are in express, which
   only `http.ts` imports; `dist/index.js` - the path most users run - never loads
   them. The critical is `proxy-addr`, reachable only through `http.ts`.

@@ -16,7 +16,7 @@ follows [Semantic Versioning](https://semver.org/).
   course with every component still outstanding.
 - **Structured errors.** 13 stable error codes with ordered recovery plans, so
   a client branches on error.code instead of parsing English.
-- **HTTP connector tests.** 19 offline checks covering routing, auth, CORS, the
+- **HTTP connector tests.** 20 offline checks covering routing, auth, CORS, the
   MCP transport, the landing page and token log-hygiene.
 
 ### Fixed

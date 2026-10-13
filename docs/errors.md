@@ -125,7 +125,7 @@ causes:
 ## Before filing an issue
 
 1. Note the **tool name** and the **error code** if you got one.
-2. Run `npm run test:all` — 136 offline checks, no account needed. If any fail,
+2. Run `npm run test:all` — 280 offline checks, no account needed. If any fail,
    that's the bug.
 3. Describe what you expected vs what you got.
 
