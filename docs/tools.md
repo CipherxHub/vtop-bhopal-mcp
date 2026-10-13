@@ -1,6 +1,6 @@
 # Tool reference
 
-22 tools. **21 read-only, 1 writes.** Argument schemas below are the real ones
+29 tools. **28 read-only, 1 writes.** Argument schemas below are the real ones
 from `src/schemas/index.ts` — this file is generated from the same source the
 server validates against.
 
@@ -122,6 +122,27 @@ and basket.
 
 **Args:** none
 
+### `get_curriculum_baskets`
+
+Programme curriculum baskets: every category (Programme Core, Programme
+Elective, University Core/Electives, …) with its courses — code, title, type,
+version, L/T/P/J and credits. Each row carries `vtopMarkedCompleted`, VTOP's
+own completion marking, reported verbatim.
+
+**Args:** none
+
+### `get_pending_subjects`
+
+Subjects still to complete, with names and credits: the curriculum baskets
+minus grade-history passes. Completion is decided ONLY by course code against
+the latest grade on record (a pass is any grade except F; N never counts).
+Period labels are never compared — timetable labels are instructional
+semesters while grade-history labels are result-publication months. Any
+disagreement between VTOP's own marking and grade history lands in
+`discrepancies` and is never resolved silently.
+
+**Args:** none
+
 > **No grade or GPA predictor exists, deliberately.** VIT awards letter grades
 > *relatively* — against the class average and its spread — and VTOP exposes
 > neither. A prediction would be you supplying a guess and getting a guess back.
@@ -139,6 +160,7 @@ and basket.
 | `month` | `string?` | `YYYY-MM` |
 | `query` | `string?` | Case-insensitive name search (`technovit`, `pongal`) |
 | `holidaysOnly` | `boolean?` | Only non-instructional days |
+| `classGroup` | `string?` | Whose calendar: `COMB` (combined, default), `ALL`, `FS`, `FT` and programme variants. VTOP publishes the list per semester. |
 
 ### `get_semesters`
 
@@ -153,6 +175,32 @@ contact details.
 
 **Args:** none
 
+### `get_student_profile`
+
+Full profile: the five accordion sections of VTOP's profile page (personal,
+educational, family, proctor, hostel information), exactly as VTOP groups them
+— date of birth, addresses, board/school, parents, proctor contact, hostel
+block and room. Use this instead of `get_profile` for anything beyond the
+basics.
+
+**Args:** none
+
+### `get_acknowledgments`
+
+Admission document checklist with per-document status (Submitted, Not
+Applicable, Not Submitted). A `Not Submitted` line names a document the student
+still owes.
+
+**Args:** none
+
+### `get_proctor_details`
+
+Proctor (faculty mentor) contact details: id, name, designation, school,
+department, cabin, email, intercom, mobile. Same data as the proctor section
+of `get_student_profile`, via the standalone proctor page.
+
+**Args:** none
+
 ---
 
 ## Hostel leave
@@ -163,8 +211,22 @@ Full documentation: **[hostel-leave.md](hostel-leave.md)**.
 |---|---|---|
 | `get_leave_types` | none | no — reads VTOP's live dropdown |
 | `get_leave_status` | none | no |
+| `get_leave_history` | none | no — full history incl. approved past leaves |
 | `get_leave_type_rules` | `leaveCode?` | no — diagnostic probe |
 | `apply_leave` | see below | **yes** |
+
+## Fees
+
+### `get_fee_receipts`
+
+Fee payment receipts: number, date, amount and campus per payment, plus the
+total paid. Pass `receiptNo` (from a previous call; a bare number is shaped
+to VTOP's `<no>/8/BPL` ref automatically) for that receipt's detail
+breakdown instead of the list. Amounts are as printed, no conversion.
+
+**Args:** `receiptNo?`
+
+---
 
 ### `apply_leave`
 

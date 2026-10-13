@@ -939,6 +939,71 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
   }
 
   /**
+   * Fetch a simple verifyMenu page (no priming, no form fields). Used by the
+   * read-only info pages that the browser reaches with a plain
+   * verifyMenu/authorizedID/_csrf POST: acknowledgments, proctor details,
+   * curriculum baskets, fee receipts, leave history.
+   */
+  private async getInfoPage(endpoint: string): Promise<string> {
+    return this.fetchPage(endpoint, {
+      verifyMenu: "true",
+      nocache: String(Date.now()),
+    });
+  }
+
+  /** Admission document checklist (Submitted / Not Applicable / Not Submitted). */
+  async getAcknowledgmentsHtml(): Promise<string> {
+    return this.getInfoPage(ENDPOINTS.acknowledgments);
+  }
+
+  /** Standalone proctor view. Same data as the profile's proctor section. */
+  async getProctorDetailsHtml(): Promise<string> {
+    return this.getInfoPage(ENDPOINTS.proctorDetails);
+  }
+
+  /** Programme curriculum baskets (per-category course tables). */
+  async getCurriculumBasketsHtml(): Promise<string> {
+    return this.getInfoPage(ENDPOINTS.curriculumBaskets);
+  }
+
+  /** Fee receipt list (number/date/amount/campus). */
+  async getFeeReceiptsHtml(): Promise<string> {
+    return this.getInfoPage(ENDPOINTS.feeReceipts);
+  }
+
+  /**
+   * One receipt's detail HTML (as rendered into the page's receipt panel).
+   *
+   * Needs the receipt ref exactly as printed on the list's VIEW button
+   * (`<number>/8/BPL`) plus the applno/registerNumber hidden fields from the
+   * list page — fetched here so callers pass only the ref.
+   */
+  async getFeeReceiptDetailHtml(receitNo: string): Promise<string> {
+    this.ensureAuthenticated();
+    const listHtml = await this.getFeeReceiptsHtml();
+    const hidden = (name: string): string => {
+      const m = listHtml.match(
+        new RegExp(`<input[^>]+name="${name}"[^>]+value="([^"]*)"`, "i"),
+      ) ?? listHtml.match(
+        new RegExp(`<input[^>]+value="([^"]*)"[^>]+name="${name}"`, "i"),
+      );
+      return m ? m[1] : "";
+    };
+    return this.postWithAuth(ENDPOINTS.feeReceiptDetail, {
+      receitNo,
+      applno: hidden("applno"),
+      registerNumber: hidden("regno") || hidden("registerNumber") || this.registrationNumber || "",
+      authorizedID: this.authorizedID!,
+      x: new Date().toUTCString(),
+    });
+  }
+
+  /** Full leave history (status + approved past records + gate-pass state). */
+  async getLeaveHistoryHtml(): Promise<string> {
+    return this.getInfoPage(ENDPOINTS.leaveHistory);
+  }
+
+  /**
    * Fetch grade-history HTML, caching it for the rest of the session.
    * Both get_grade_history and get_curriculum_progress parse this same
    * response, so we don't want to hit VTOP twice when chained.
@@ -964,28 +1029,35 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
    * overrides) for the months overlapping [fromISO, toISO]. Three-step VTOP
    * flow: load the calendar page for context, fetch the month buttons, then
    * fetch each needed month's day table. Month list + parsed months are cached
-   * per semester for the session.
+   * per semester AND class group for the session.
+   *
+   * classGroupId selects whose calendar: COMB (combined, the default), ALL
+   * (General), FS (Freshers), FT (Fast Track) and programme variants. VTOP
+   * publishes the list per semester; anything unrecognised returns whatever
+   * VTOP serves for it rather than an invented error.
    */
   async getCalendar(
     semesterId: string,
     fromISO: string,
     toISO: string,
+    classGroupId = "COMB",
   ): Promise<CalendarDay[]> {
     this.ensureAuthenticated();
     const x = () => new Date().toUTCString();
+    const cacheKey = `${semesterId}|${classGroupId}`;
 
-    if (this.cachedCalendarSem !== semesterId || !this.cachedCalendarMonths) {
+    if (this.cachedCalendarSem !== cacheKey || !this.cachedCalendarMonths) {
       // Loading the page first establishes the calendar context; the month-list
       // and month actions 404 otherwise (same nav-state quirk as login).
       await this.postWithAuth(ENDPOINTS.calendarPreview, {});
       const listHtml = await this.postWithAuth(ENDPOINTS.calendarMonthList, {
         paramReturnId: "getListForSemester",
         semSubId: semesterId,
-        classGroupId: "COMB",
+        classGroupId,
         x: x(),
       });
       this.cachedCalendarMonths = parseCalendarMonths(listHtml);
-      this.cachedCalendarSem = semesterId;
+      this.cachedCalendarSem = cacheKey;
       this.cachedCalendarDays = {};
     }
 
@@ -1001,7 +1073,7 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
       const html = await this.postWithAuth(ENDPOINTS.calendarMonth, {
         calDate: cd,
         semSubId: semesterId,
-        classGroupId: "COMB",
+        classGroupId,
         x: x(),
       });
       this.cachedCalendarDays[cd] = parseAcademicCalendar(html, cd);

@@ -12,6 +12,14 @@ import type {
   CurriculumProgress,
   CurriculumProgressRow,
   GradeDistribution,
+  ProfileSection,
+  ProctorDetails,
+  Acknowledgment,
+  CurriculumBasket,
+  CurriculumCourse,
+  PendingSubject,
+  CompletionDiscrepancy,
+  FeeReceipt,
 } from "../types/index.js";
 import { GRADE_LETTERS, GRADE_POINTS } from "./constants.js";
 
@@ -1329,3 +1337,310 @@ export function parseCurriculumProgress(html: string): CurriculumProgress {
   return progress;
 }
 
+
+/**
+ * Generic accordion-section reader for the info pages (profile, proctor).
+ * Every section is a heading followed by label/value table rows: find each
+ * section heading, then read key/value cell pairs until the next heading.
+ */
+function splitInfoSections(
+  html: string,
+  headingSelector: string,
+): { title: string; fields: Record<string, string> }[] {
+  const $ = cheerio.load(html);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const sections: { title: string; fields: Record<string, string> }[] = [];
+
+  $(headingSelector).each((_, h) => {
+    const title = clean($(h).text()).toUpperCase();
+    if (!title) return;
+    const fields: Record<string, string> = {};
+    // Anchor on the heading element itself: the matched button sits INSIDE
+    // the heading (h2 > button), while the section body follows the heading.
+    // Walking the button's own siblings finds nothing.
+    const anchor = $(h).closest("h1,h2,h3,h4");
+    const start = anchor.length > 0 ? anchor : $(h).parent();
+    const stopTag = start.prop("tagName");
+    let guard = 0;
+    for (
+      let cur = start.next();
+      cur.length > 0 && guard < 400;
+      cur = cur.next(), guard++
+    ) {
+      if (cur.prop("tagName") === stopTag && clean(cur.text())) break;
+      cur.find("tr").each((_, tr) => {
+        const cells = $(tr)
+          .children("td,th")
+          .toArray()
+          .map((c) => clean($(c as never).text()));
+        for (let i = 0; i + 1 < cells.length; i += 2) {
+          if (cells[i] && !(cells[i] in fields)) fields[cells[i]] = cells[i + 1] ?? "";
+        }
+      });
+    }
+    if (Object.keys(fields).length > 0) sections.push({ title, fields });
+  });
+
+  return sections;
+}
+
+/**
+ * Full student profile: the accordion sections of
+ * studentsRecord/StudentProfileAllView (personal, educational, family,
+ * proctor, hostel), exactly as VTOP groups them. Values are verbatim strings.
+ */
+export function parseStudentProfileFull(html: string): ProfileSection[] {
+  return splitInfoSections(html, "h2 button.accordion-button, h2 .accordion-button");
+}
+
+/**
+ * Proctor details, flat. The proctor/viewProctorDetails page carries the same
+ * table as the profile's proctor section.
+ */
+export function parseProctorDetails(html: string): ProctorDetails {
+  const $ = cheerio.load(html);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const get = (...labels: string[]): string => {
+    for (const tr of $("tr").toArray()) {
+      const cells = $(tr)
+        .children("td,th")
+        .toArray()
+        .map((c) => clean($(c as never).text()));
+      for (let i = 0; i + 1 < cells.length; i += 2) {
+        if (labels.some((l) => cells[i].toLowerCase() === l.toLowerCase())) {
+          return cells[i + 1] ?? "";
+        }
+      }
+    }
+    return "";
+  };
+  return {
+    facultyId: get("faculty id"),
+    name: get("faculty name"),
+    designation: get("faculty designation"),
+    school: get("school"),
+    department: get("faculty department"),
+    cabin: get("cabin"),
+    email: get("faculty email"),
+    intercom: get("faculty intercom"),
+    mobile: get("faculty mobile number"),
+  };
+}
+
+/**
+ * Admission document checklist from admissions/AcknowledgmentView.
+ * Rows are (Sl.No, document, status); the header row is skipped by content.
+ */
+export function parseAcknowledgments(html: string): Acknowledgment[] {
+  const $ = cheerio.load(html);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const out: Acknowledgment[] = [];
+  $("tr").each((_, tr) => {
+    const cells = $(tr)
+      .children("td")
+      .toArray()
+      .map((c) => clean($(c as never).text()));
+    if (cells.length < 3) return;
+    const doc = cells[1] ?? "";
+    const status = cells[cells.length - 1] ?? "";
+    if (!doc || /^(sl\.?\s*no|s\.no)/i.test(doc)) return;
+    if (!/submitted|not applicable|pending|verified/i.test(status)) return;
+    out.push({ document: doc, status });
+  });
+  return out;
+}
+
+/**
+ * Programme curriculum baskets from academics/common/Curriculum.
+ *
+ * Each category tab holds a course table (code, title, type, version, L/T/P/J,
+ * credits). Completion is VTOP's own marking: rows carrying the `bg-success`
+ * class are complete. That flag is reported verbatim as
+ * `vtopMarkedCompleted` — the grade-history cross-check lives in
+ * computePendingSubjects, not here.
+ */
+export function parseCurriculumBaskets(html: string): CurriculumBasket[] {
+  const $ = cheerio.load(html);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const num = (s: string): number => parseFloat(s.replace(/[^0-9.]/g, "")) || 0;
+  const baskets: CurriculumBasket[] = [];
+
+  $("table").each((_, tableEl) => {
+    const $table = $(tableEl);
+    const headerCells = $table
+      .find("tr")
+      .first()
+      .children("td,th")
+      .toArray()
+      .map((c) => clean($(c as never).text()).toLowerCase());
+    const isCourseTable =
+      headerCells.some((h) => h.includes("course code")) &&
+      headerCells.some((h) => h.includes("credit"));
+    if (!isCourseTable) return;
+
+    // Category is the nearest preceding tab/heading label.
+    let category = "Uncategorised";
+    const tab = $table.closest("[role='tabpanel'], .tab-pane");
+    const tabId = tab.attr("id") ?? tab.attr("aria-labelledby") ?? "";
+    if (tabId) {
+      const label = clean($(`a[href='#${tabId}'], button[data-bs-target='#${tabId}']`).first().text());
+      if (label) category = label;
+    }
+    if (category === "Uncategorised") {
+      const prev = $table.prevAll("h1,h2,h3,h4,.nav-link.active").first().text();
+      if (clean(prev)) category = clean(prev);
+    }
+
+    const courses: CurriculumCourse[] = [];
+    $table.find("tbody tr, tr").each((_, tr) => {
+      const $tr = $(tr);
+      const tds = $tr.children("td").toArray();
+      if (tds.length < 8) return;
+      const texts = tds.map((c) => clean($(c as never).text()));
+      // Course code sits in the second cell, possibly beside a syllabus icon.
+      const code = (texts[1].match(/[A-Z]{2,}\d+[A-Z]*/)?.[0] ?? "").trim();
+      if (!/^[A-Z]{2,}\d/.test(code)) return;
+      courses.push({
+        code,
+        title: texts[2] ?? "",
+        type: texts[3] ?? "",
+        version: texts[4] ?? "",
+        l: num(texts[5] ?? ""),
+        t: num(texts[6] ?? ""),
+        p: num(texts[7] ?? ""),
+        j: num(texts[8] ?? ""),
+        credits: num(texts[texts.length - 1] ?? ""),
+        vtopMarkedCompleted: ($tr.attr("class") ?? "").split(/\s+/).includes("bg-success"),
+      });
+    });
+
+    if (courses.length > 0) baskets.push({ category, courses });
+  });
+
+  return baskets;
+}
+
+/** Grades that count as a completed course. F failed, N never graded. */
+const PASSING_GRADES = new Set(["S", "A", "B", "C", "D", "E", "P"]);
+
+/**
+ * Pending subjects = curriculum baskets minus grade-history passes.
+ *
+ * Rules, all verified against live VTOP behaviour:
+ * - Join ONLY on course code. Timetable labels are instructional semesters,
+ *   grade-history labels are result-publication months — never comparable.
+ * - "Completed" = the LATEST grade on record is a passing grade. Latest =
+ *   the last exam-month bucket holding that course (history is date-sorted).
+ * - VTOP's own bg-success marking is reported alongside, and any disagreement
+ *   lands in `discrepancies` — never silently resolved in either direction.
+ * - Elective baskets (only N of M credits required) still list every
+ *   uncompleted basket course; the category totals say how many credits short.
+ */
+export function computePendingSubjects(
+  baskets: CurriculumBasket[],
+  history: GradeHistory,
+): {
+  pending: (PendingSubject & { category: string })[];
+  completedCount: number;
+  discrepancies: CompletionDiscrepancy[];
+} {
+  const latest: Record<string, { grade: string; title: string }> = {};
+  for (const sem of history.semesters) {
+    for (const g of sem.grades) {
+      latest[g.courseCode] = { grade: g.grade, title: g.courseName };
+    }
+  }
+  const gradeCompleted = (code: string): { done: boolean; grade: string | null } => {
+    const rec = latest[code];
+    if (!rec) return { done: false, grade: null };
+    return { done: PASSING_GRADES.has(rec.grade), grade: rec.grade };
+  };
+
+  const pending: (PendingSubject & { category: string })[] = [];
+  const discrepancies: CompletionDiscrepancy[] = [];
+  let completedCount = 0;
+
+  for (const basket of baskets) {
+    for (const course of basket.courses) {
+      const { done, grade } = gradeCompleted(course.code);
+      if (done) {
+        completedCount++;
+      } else {
+        pending.push({
+          ...course,
+          category: basket.category,
+          latestGrade: grade,
+          completedPerGrades: false,
+        });
+      }
+      if (done !== course.vtopMarkedCompleted) {
+        discrepancies.push({
+          courseCode: course.code,
+          courseTitle: course.title,
+          vtopMarkedCompleted: course.vtopMarkedCompleted,
+          gradeBasedCompleted: done,
+          latestGrade: grade,
+        });
+      }
+    }
+  }
+
+  return { pending, completedCount, discrepancies };
+}
+
+/**
+ * Fee receipt list from finance/getStudentReceipts.
+ * Columns: receipt number, date, amount, campus.
+ */
+export function parseFeeReceipts(html: string): FeeReceipt[] {
+  const $ = cheerio.load(html);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const out: FeeReceipt[] = [];
+
+  $("tr").each((_, tr) => {
+    const cells = $(tr)
+      .children("td")
+      .toArray()
+      .map((c) => clean($(c as never).text()));
+    if (cells.length < 4) return;
+    // Receipt numbers are bare digits; the header row ("RECEIPT NUMBER") and
+    // any non-data row fail this test.
+    if (!/^\d+$/.test(cells[0] ?? "")) return;
+    const amount = parseFloat((cells[2] ?? "").replace(/[^0-9.]/g, "")) || 0;
+    out.push({
+      receiptNumber: cells[0] ?? "",
+      date: cells[1] ?? "",
+      amount,
+      campus: cells[3] ?? "",
+    });
+  });
+
+  return out;
+}
+
+/**
+ * One receipt's detail panel (finance/dupReceiptNewP2P response, as rendered
+ * into the page). Generic label/value harvest: every table row's first cell
+ * is the label, the rest joined is the value. Unknown layouts still yield
+ * their visible text rather than an empty object.
+ */
+export function parseFeeReceiptDetail(
+  receiptNumber: string,
+  html: string,
+): { receiptNumber: string; fields: Record<string, string> } {
+  const $ = cheerio.load(html);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const fields: Record<string, string> = {};
+  $("tr").each((_, tr) => {
+    const cells = $(tr)
+      .children("td,th")
+      .toArray()
+      .map((c) => clean($(c as never).text()));
+    if (cells.length < 2 || !cells[0]) return;
+    const label = cells[0];
+    const value = cells.slice(1).join(" / ");
+    if (!(label in fields)) fields[label] = value;
+  });
+  const text = clean($.text());
+  return { receiptNumber, fields: Object.keys(fields).length > 0 ? fields : { text: text.slice(0, 2000) } };
+}

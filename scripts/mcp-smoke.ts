@@ -39,6 +39,13 @@ const EXPECTED_TOOLS = [
   "get_leave_status",
   "apply_leave",
   "get_leave_type_rules",
+  "get_leave_history",
+  "get_student_profile",
+  "get_acknowledgments",
+  "get_proctor_details",
+  "get_curriculum_baskets",
+  "get_pending_subjects",
+  "get_fee_receipts",
 ].sort();
 
 /**

@@ -15,6 +15,8 @@ import { registerTodayClassesTool } from "./tools/today.js";
 import { registerCalendarTool } from "./tools/calendar.js";
 import { registerPassEligibilityTool } from "./tools/pass-eligibility.js";
 import { registerLeaveTools } from "./tools/leave.js";
+import { registerStudentInfoTools } from "./tools/student-info.js";
+import { registerFeesTools, registerCurriculumBasketTools } from "./tools/fees-curriculum.js";
 // NOTE: there is deliberately no grade predictor. Predicting a letter grade
 // needs the class average and spread, which VTOP does not expose, and VIT
 // grades relatively - so any prediction would be guesswork presented as data.
@@ -52,6 +54,9 @@ export function createServer(
   registerTodayClassesTool(server, client);
   registerCalendarTool(server, client);
   registerPassEligibilityTool(server, client);
+  registerStudentInfoTools(server, client);
+  registerFeesTools(server, client);
+  registerCurriculumBasketTools(server, client);
   // Stdio gets an unpredictable process-local owner; HTTP supplies a stable
   // hash of the authenticated connector token so previews survive a fresh MCP
   // transport while remaining unusable by another connector user.

@@ -10,15 +10,16 @@ export function registerCalendarTool(server: McpServer, client: VtopClient) {
     "get_calendar",
     "Look up the academic calendar: holidays, events (e.g. TechnoVIT), working Saturdays / day-orders, and which days are instructional. Use `query` to find a named event/holiday (e.g. 'technovit', 'pongal'), `month` ('YYYY-MM') to list a month, or `holidaysOnly` for just the no-class days; with no filter it returns the semester's notable days (holidays + working-Saturday day-orders). Festivals/holidays belong to the term they fall in, so if a `query` finds nothing, call get_semesters and retry with that semester's id. If the response contains NOT_AUTHENTICATED, call get_captcha then login then retry. Requires login.",
     CalendarSchema.shape,
-    async ({ semesterId, month, query, holidaysOnly }) => {
+    async ({ semesterId, month, query, holidaysOnly, classGroup }) => {
       const id = semesterId ?? (await client.getCurrentSemesterId());
+      const group = classGroup?.trim() || "COMB";
       let from = "1900-01-01";
       let to = "2999-12-31";
       if (month && /^\d{4}-\d{2}$/.test(month)) {
         from = `${month}-01`;
         to = `${month}-31`;
       }
-      const days = await client.getCalendar(id, from, to);
+      const days = await client.getCalendar(id, from, to, group);
 
       const isNotable = (d: CalendarDay) =>
         !d.instructional || !!d.dayOrderWeekday || (!!d.label && !/^working day$/i.test(d.label));
@@ -45,6 +46,7 @@ export function registerCalendarTool(server: McpServer, client: VtopClient) {
 
       return {
         semesterId: id,
+        classGroup: group,
         ...(query ? { query } : {}),
         count: view.length,
         ...(query && view.length === 0

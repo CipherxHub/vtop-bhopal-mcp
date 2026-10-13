@@ -153,3 +153,79 @@ export interface CurriculumProgress {
   /** Count of each grade earned across the whole degree. */
   gradeDistribution: GradeDistribution;
 }
+
+/** One accordion section of the full student profile, exactly as VTOP groups it. */
+export interface ProfileSection {
+  /** E.g. "PERSONAL INFORMATION", "HOSTEL INFORMATION". */
+  title: string;
+  /** Label → value as printed, e.g. { "DATE OF BIRTH": "02-Nov-2004" }. */
+  fields: Record<string, string>;
+}
+
+/** Proctor details. Verbatim strings — an empty cabin renders as "null". */
+export interface ProctorDetails {
+  facultyId: string;
+  name: string;
+  designation: string;
+  school: string;
+  department: string;
+  cabin: string;
+  email: string;
+  intercom: string;
+  mobile: string;
+}
+
+/** One admission document line from the acknowledgment checklist. */
+export interface Acknowledgment {
+  document: string;
+  /** Verbatim: "Submitted" / "Not Applicable" / "Not Submitted". */
+  status: string;
+}
+
+/** One course row from a programme curriculum basket. */
+export interface CurriculumCourse {
+  code: string;
+  title: string;
+  type: string;
+  version: string;
+  l: number;
+  t: number;
+  p: number;
+  j: number;
+  credits: number;
+  /**
+   * Whether VTOP itself marks this row completed (the `bg-success` row class).
+   * Read from the page, never recomputed — cross-check against grades instead.
+   */
+  vtopMarkedCompleted: boolean;
+}
+
+/** One programme-curriculum category and its courses. */
+export interface CurriculumBasket {
+  category: string;
+  courses: CurriculumCourse[];
+}
+
+/** One course the student has not yet completed. */
+export interface PendingSubject extends CurriculumCourse {
+  /** Latest grade on record, if the course was attempted before. */
+  latestGrade: string | null;
+  completedPerGrades: boolean;
+}
+
+/** A course where VTOP's own completion marking disagrees with grade history. */
+export interface CompletionDiscrepancy {
+  courseCode: string;
+  courseTitle: string;
+  vtopMarkedCompleted: boolean;
+  gradeBasedCompleted: boolean;
+  latestGrade: string | null;
+}
+
+/** One fee receipt line. */
+export interface FeeReceipt {
+  receiptNumber: string;
+  date: string;
+  amount: number;
+  campus: string;
+}

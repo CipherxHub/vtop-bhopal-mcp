@@ -84,6 +84,12 @@ export const CalendarSchema = z.object({
     .optional()
     .describe("Case-insensitive search of event/holiday names (e.g. 'technovit', 'pongal')."),
   holidaysOnly: z.boolean().optional().describe("Return only non-instructional (holiday / no-class) days."),
+  classGroup: z
+    .string()
+    .optional()
+    .describe(
+      "Whose calendar: COMB (combined, the default), ALL (General), FS (Freshers), FT (Fast Track) and programme variants. VTOP publishes the list per semester; anything unrecognised returns whatever VTOP serves for it.",
+    ),
 });
 
 export const TodayClassesSchema = z.object({
@@ -91,6 +97,15 @@ export const TodayClassesSchema = z.object({
     .string()
     .optional()
     .describe("ISO date YYYY-MM-DD to look up. If omitted, uses today (IST)."),
+});
+
+export const FeeReceiptsSchema = z.object({
+  receiptNo: z
+    .string()
+    .optional()
+    .describe(
+      "A receipt number from a previous get_fee_receipts call, to fetch that receipt's detail breakdown instead of the list. Omit for the full list.",
+    ),
 });
 
 export const ApplyLeaveSchema = z.object({

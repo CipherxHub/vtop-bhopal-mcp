@@ -10,7 +10,7 @@ An [MCP](https://modelcontextprotocol.io) server. Connect it to OpenCode, Claude
 
 > ### ⚠️ Exactly one tool writes to your account
 >
-> Of the 22 tools, **21 are strictly read-only.** One is not: **`apply_leave`** submits a real hostel leave application for your proctor. That is the only write.
+> Of the 29 tools, **28 are strictly read-only.** One is not: **`apply_leave`** submits a real hostel leave application for your proctor. That is the only write.
 >
 > It cannot fire by accident. It is two-step — a **preview** call validates and returns a fingerprint token without sending anything, and a **confirm** call must repeat the identical fields *and* that token. Change any field in between and it's refused. It also declares `readOnlyHint: false` so a compliant client prompts rather than auto-approving.
 >
@@ -336,7 +336,7 @@ code — rebuilding `dist/` does nothing to a process that already loaded it,
 so kill leftovers after every rebuild.
 
 **10. `apply_leave` and approvals.**
-Of the 22 tools, 21 are read-only. `apply_leave` submits a real hostel leave
+Of the 29 tools, 28 are read-only. `apply_leave` submits a real hostel leave
 application to your proctor — two-step (preview returns a token, confirm
 repeats the identical fields plus that token), but a live write all the same.
 Keep approval prompts on for it (and for `login`) in clients that support
@@ -384,7 +384,7 @@ Full reference, including arguments and return shapes: **[docs/tools.md](docs/to
 
 | | |
 |---|---|
-| [docs/tools.md](docs/tools.md) | All 22 tools — arguments, returns, read/write |
+| [docs/tools.md](docs/tools.md) | All 29 tools — arguments, returns, read/write |
 | [docs/hostel-leave.md](docs/hostel-leave.md) | Leave types, rules, the two-step confirmation |
 | [docs/http-connector.md](docs/http-connector.md) | Hosting it remotely, and its security model |
 | [docs/errors.md](docs/errors.md) | Error codes, recovery paths, troubleshooting |

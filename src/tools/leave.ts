@@ -222,6 +222,34 @@ export function registerLeaveTools(
     { emptyMessage: "No leave applications found on VTOP." },
   );
 
+  // --- read: leave history -------------------------------------------------
+  // Separate page from get_leave_status: the status view surfaces the current
+  // record(s), while hostels/student/barcodeleave carries the full history
+  // including approved past leaves with approver names and gate-pass state.
+  // Same parser — both views share the table shape.
+  mkJsonTool(
+    server,
+    "get_leave_history",
+    "Full hostel leave history: every leave application on record — id, type, place, " +
+      "reason, from/to, status, approver remarks, and gate-pass OUT/IN state. Use this " +
+      "for 'what leaves have I taken?' or past-leave questions; use get_leave_status " +
+      "for the current state. Statuses are reported exactly as VTOP prints them. " +
+      "Read-only. Requires login.",
+    {},
+    async () => {
+      const records = parseLeaveRecords(await client.getLeaveHistoryHtml());
+      return {
+        count: records.length,
+        records,
+        note:
+          "Statuses are reported exactly as VTOP prints them. An empty list means VTOP " +
+          "has no leave history to show, which is different from the module being " +
+          "unavailable - that raises ENDPOINT_NOT_FOUND instead.",
+      };
+    },
+    { emptyMessage: "No leave history found on VTOP." },
+  );
+
   // --- write: apply leave --------------------------------------------------
   mkJsonTool(
     server,
