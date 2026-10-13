@@ -6,6 +6,14 @@ const IV_LEN = 12;
 const TAG_LEN = 16;
 const KDF_SALT = "vtop-mcp-token-v1";
 const MIN_SECRET_LEN = 16;
+/** Connector token version with expiry (issue #4). v1 tokens carry no exp. */
+const TOKEN_VERSION = 2;
+/** Days a newly issued connector token stays valid. Override with CONNECTOR_TOKEN_TTL_DAYS. */
+function tokenTtlMs(): number {
+  const days = Number(process.env.CONNECTOR_TOKEN_TTL_DAYS ?? 90);
+  if (!Number.isFinite(days) || days <= 0) return 90 * 24 * 3600 * 1000;
+  return Math.min(days, 3650) * 24 * 3600 * 1000;
+}
 
 let cachedKey: Buffer | null = null;
 
@@ -64,12 +72,28 @@ export function decryptString(token: string): string {
  * self-contained ciphertext (AES-256-GCM) — nothing is stored server-side, so
  * the deployment needs no database. Only a holder of CONNECTOR_SECRET can
  * decrypt it.
+ *
+ * v2 tokens carry iat/exp so a leaked URL stops working (issue #4). Treat the
+ * connector URL as a secret: it lands in proxy logs and Referer headers.
  */
 export function encryptCredentials(creds: Credentials): string {
-  return encryptString(JSON.stringify(creds));
+  const now = Date.now();
+  return encryptString(
+    JSON.stringify({
+      username: creds.username,
+      password: creds.password,
+      v: TOKEN_VERSION,
+      iat: now,
+      exp: now + tokenTtlMs(),
+    }),
+  );
 }
 
-/** Reverse of encryptCredentials. Throws if the token is malformed or forged. */
+/**
+ * Reverse of encryptCredentials. Throws if the token is malformed, forged, or
+ * expired. Legacy v1 tokens (no exp) are still accepted so a deploy does not
+ * log out every user at once — they should re-register for an expiring token.
+ */
 export function decryptCredentials(token: string): Credentials {
   const obj: unknown = JSON.parse(decryptString(token));
   if (
@@ -81,5 +105,11 @@ export function decryptCredentials(token: string): Credentials {
     throw new Error("Token payload is malformed.");
   }
   const { username, password } = obj as Credentials;
+  const exp = (obj as { exp?: unknown }).exp;
+  if (exp !== undefined) {
+    if (typeof exp !== "number" || !Number.isFinite(exp) || Date.now() > exp) {
+      throw new Error("Connector token has expired. Re-register at /register to get a new one.");
+    }
+  }
   return { username, password };
 }
