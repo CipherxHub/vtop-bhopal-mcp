@@ -68,7 +68,11 @@ const STYLE = `
   }
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+html,body{overflow-x:clip}
+/* Anchored sections (#how, #connect, #safe) must clear the sticky bar when
+   jumped to — otherwise the hamburger menu drops users under the header. */
+section[id]{scroll-margin-top:88px}
 body{
   background:var(--paper);color:var(--ink);
   font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -221,7 +225,8 @@ pre{background:var(--code-bg);color:var(--code-ink);border:1px solid var(--line)
 .copy.copied{color:var(--accent);border-color:var(--accent)}
 .copy svg{width:13px;height:13px}
 .ready{display:inline-flex;align-items:center;gap:9px;color:var(--accent);font-family:"JetBrains Mono",monospace;
-  font-size:11.5px;letter-spacing:.22em;text-transform:uppercase}
+  font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;text-wrap:balance}
+@media(max-width:560px){.ready{letter-spacing:.14em}}
 details{margin-top:22px;border-top:1px solid var(--line);padding-top:6px}
 summary{cursor:pointer;font-size:14px;color:var(--soft);padding:14px 0;list-style:none}
 summary:hover{color:var(--ink)}
@@ -251,6 +256,7 @@ footer.foot .by b{color:var(--ink);font-weight:600}
    off wholesale for users who ask for reduced motion. */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{transition:none!important;animation:none!important}
+  html{scroll-behavior:auto}
 }
 `;
 
@@ -503,7 +509,7 @@ export function landingPage(origin: string, canonicalPath: string): string {
   <span class="eyebrow">MCP connector · VIT Bhopal</span>
   <h1>Your VTOP,<br>in <em>any AI assistant</em>.</h1>
   <p class="lede">Connect your VIT Bhopal VTOP once, then just ask: <em>“how many more classes can I skip?”</em> · <em>“what do I need in the TEE to pass?”</em> · <em>“when is my FAT and where?”</em> Real answers from your own VTOP, in plain English — attendance, marks, timetable, exams, grades, CGPA and hostel leave. Works with Claude, ChatGPT, Cursor, OpenCode and anything else that speaks MCP.</p>
-  <span class="ready" style="margin-top:18px"><span class="dot"></span>Setup in under 1 minute · just 3 steps</span>
+  <span class="ready" style="margin-top:18px"><span class="dot"></span>3 steps · under a minute</span>
 </section>
 <section>
   <div class="panel">

@@ -402,6 +402,14 @@ try {
     assert.ok(html.includes('"Escape"'), "Escape must close the menu");
   });
 
+  await check("anchored sections clear the sticky header", async () => {
+    // Menu navigation jumps to #how/#connect/#safe; without scroll-margin
+    // the sticky bar covers the section kicker on arrival.
+    const html = await (await fetch(`${multi.base}/`)).text();
+    assert.ok(html.includes("section[id]{scroll-margin-top:"), "anchors must offset the sticky header");
+    assert.ok(html.includes("overflow-x:clip"), "100vw header backdrop must not cause sideways scroll");
+  });
+
   await check("register never echoes the submitted password back", async () => {
     const html = await (
       await fetch(`${multi.base}/register`, {
