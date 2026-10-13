@@ -11,7 +11,10 @@ import type { UserStat } from "./services/session-store.js";
 
 const BRAND = "VTOP Connector";
 const REPO_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp";
-const AUTHOR_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp";
+// The "built by" credit points at the person's profile, not at the project it
+// happens to live in - those are different destinations and clicking through
+// to a repo to find out who maintains it is a dead end.
+const AUTHOR_URL = "https://github.com/CipherxHub";
 const AUTHOR_NAME = "CipherxHub";
 // npm publishing is not set up (the package is private), so the site points at
 // the repo and a clone command rather than an install line that would 404.
@@ -290,12 +293,12 @@ function layout(o: LayoutOpts): string {
     <a href="#connect">Connect</a>
     <a href="#safe">Safety</a>
     <a class="gh" href="${REPO_URL}" target="_blank" rel="noopener">GitHub&nbsp;↗</a>
-    <a class="madeby" href="${REPO_URL}" target="_blank" rel="noopener">built by <strong>CipherxHub</strong>&nbsp;↗</a>
+    <a class="madeby" href="${AUTHOR_URL}" target="_blank" rel="noopener">built by <strong>CipherxHub</strong>&nbsp;↗</a>
   </nav>
 </header>
 ${o.body}
 <footer class="foot">
-  <span class="by">Built by <a href="${REPO_URL}" target="_blank" rel="noopener"><b>CipherxHub</b></a></span>
+  <span class="by">Built by <a href="${AUTHOR_URL}" target="_blank" rel="noopener"><b>CipherxHub</b></a></span>
   <span class="links">
     <a href="${REPO_URL}" target="_blank" rel="noopener">Source ↗</a>
     <a href="${REPO_URL}/blob/main/docs/tools.md" target="_blank" rel="noopener">Tools ↗</a>
