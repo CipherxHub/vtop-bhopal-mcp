@@ -586,6 +586,12 @@ app.post("/register", (req: Request, res: Response) => {
 
 app.listen(PORT, BIND_HOST, () => {
   console.error(`VtopMCP HTTP server listening on ${BIND_HOST}:${PORT}${MCP_PATH}`);
+  if (!isMultiUserEnabled()) {
+    console.error(
+      "VtopMCP: single-user mode — no per-caller isolation. Bind to localhost or put it behind auth; " +
+        "anyone who can reach this port can use your VTOP session.",
+    );
+  }
   if (isMultiUserEnabled()) {
     console.error(`Multi-user mode ON — users register at :${PORT}/register`);
   }

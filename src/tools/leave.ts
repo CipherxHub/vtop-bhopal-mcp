@@ -17,7 +17,6 @@ import {
   findClassOverlaps,
   findExamOverlaps,
   issuePreviewToken,
-  leaveFingerprint,
   normaliseTime,
   validateLeave,
   verifyPreviewToken,
@@ -268,9 +267,7 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
       }
 
       const validation = validateLeave(request, { todayISO: today, knownTypes });
-      const fingerprint = leaveFingerprint(request);
-      // Server-signed single-use token (issue #6). The raw fingerprint stays
-      // as the field-binding inside the token, but is never accepted directly.
+      // Server-signed single-use token (issue #6) binding the exact fields.
       const previewTokenIssued = issuePreviewToken(request);
 
       const semesterId = await client.getCurrentSemesterId();
@@ -417,13 +414,25 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
       const vtopMessage = extractMessage(responseHtml);
       // VTOP rejects bad submits server-side (e.g. over a duration cap) by
       // returning the form/error page with no new leave row. Never report
-      // success when nothing was created.
-      if (
-        applied.length === 0 &&
-        /not exceed|reject|fail|error|unable|cannot|invalid/i.test(vtopMessage ?? "")
-      ) {
+      // success when nothing was created — and never claim success on zero
+      // rows without affirmative confirmation either.
+      if (applied.length === 0) {
+        if (/not exceed|reject|fail|error|unable|cannot|invalid/i.test(vtopMessage ?? "")) {
+          return {
+            mode: "SUBMIT REJECTED - nothing created",
+            submitted: request,
+            submittedAt: new Date().toISOString(),
+            vtopResponse: {
+              leaveRecords: applied,
+              message: vtopMessage,
+            },
+            verdict:
+              vtopMessage ??
+              "VTOP did not create a leave — no new record was returned. Nothing was submitted.",
+          };
+        }
         return {
-          mode: "SUBMIT REJECTED - nothing created",
+          mode: "SUBMIT UNCLEAR - no new record parsed",
           submitted: request,
           submittedAt: new Date().toISOString(),
           vtopResponse: {
@@ -431,8 +440,8 @@ export function registerLeaveTools(server: McpServer, client: VtopClient): void 
             message: vtopMessage,
           },
           verdict:
-            vtopMessage ??
-            "VTOP did not create a leave — no new record was returned. Nothing was submitted.",
+            "VTOP returned no new leave row and no clear confirmation. Call get_leave_status " +
+            "before assuming anything was created.",
         };
       }
       return {
