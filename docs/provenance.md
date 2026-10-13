@@ -28,7 +28,7 @@ divyarthjain              divyarthjain/vtop-bhopal-mcp    Apache-2.0
         ▼
 CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
   leave tools, pass-eligibility arithmetic, error taxonomy, cache, keepalive,
-  captcha upscaling, structured errors, 280 offline checks
+  captcha upscaling, structured errors, 281 offline checks
   and all testing against the live portal
 ```
 
@@ -41,7 +41,7 @@ CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
 
 ### Vikranth Jagdish — VtopMCP (MIT)
 
-`src` grew from 4,623 lines in VtopMCP to 8,211 here. Six files are
+`src` grew from 4,623 lines in VtopMCP to 8,283 here. Six files are
 **byte-for-byte identical** to his:
 
 | File | Lines | What it is |
@@ -54,8 +54,11 @@ CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
 | `src/tools/curriculum.ts` | 17 | Curriculum tool |
 | **Total** | **609** | |
 
-Across all of `src`, **3,552 of 8,211 lines (43.3%)** are byte-identical to
-VtopMCP.
+Of the 8,283 lines now in `src`, **609 sit inside files that are
+byte-for-byte unchanged** — 7.4%. An earlier version of this file quoted 43.3%
+by measuring "lines not added relative to upstream", which counts a modified
+file as if none of it were inherited. That overstates it badly and has been
+replaced with the figure that can be verified directly.
 
 Three files were byte-identical when this fork started and are **no longer**:
 
@@ -85,7 +88,6 @@ Diffing their repo against VtopMCP shows what they changed:
 | File | Added | Removed |
 |---|---:|---:|
 | `src/services/vtop-parser.ts` | +209 | −153 |
-| `src/tools/od-calc.ts` | +16 | −11 |
 | `src/tools/profile.ts` | +11 | −2 |
 | `src/services/constants.ts` | +10 | −3 |
 | `src/services/vtop-client.ts` | +1 | −1 |
@@ -103,25 +105,32 @@ the credit is neither inflated nor hidden.
 
 ### CipherxHub — original work
 
-Nine files with no upstream counterpart, 2,563 lines:
+Ten files with no upstream counterpart, 2,784 lines:
 
 | File | Lines | What it does |
 |---|---:|---|
-| `src/services/leave.ts` | 548 | Leave validation, 18:00 rule, fingerprints, class + exam overlap |
-| `src/services/exam-eligibility.ts` | 451 | Pass arithmetic in both scales, 80-of-200 conservation |
+| `src/services/leave.ts` | 643 | Leave validation, 18:00 rule, fingerprints, class + exam overlap |
+| `src/tools/leave.ts` | 486 | The four leave tools |
+| `src/services/exam-eligibility.ts` | 453 | Pass arithmetic in both scales, 80-of-200 conservation |
 | `src/services/marks-calc.ts` | 385 | Internal totals, pending components, the lower-bound caveat |
-| `src/tools/pass-eligibility.ts` | 287 | Tool surface for the above |
+| `src/tools/pass-eligibility.ts` | 294 | Tool surface for the above |
 | `src/services/errors.ts` | 195 | 13 structured error codes with recovery chains |
 | `src/services/captcha-image.ts` | 112 | 5× captcha upscaling |
 | `src/services/cache.ts` | 80 | Bounded TTL cache |
 | `src/services/keepalive.ts` | 69 | Session keepalive |
-| `src/tools/leave.ts` | 436 | The four leave tools |
-| **Total** | **2,563** | |
+| `src/services/captcha-file.ts` | 67 | Captcha file fallback for clients that drop `image` blocks |
+| **Total** | **2,784** | |
 
 Plus substantial edits to inherited files: `vtop-parser.ts` (404 lines changed
 against VtopMCP), `vtop-client.ts`, `http.ts` (auth, transport, CORS, bind),
 `web.ts`, `schemas/index.ts`, `types/index.ts` — and the test suite, which grew
-from none to **280 offline checks**.
+from none to **281 offline checks**.
+
+The two line totals in this file measure different things on purpose. **2,784**
+is the code in files that do not exist upstream at all, so it is original by
+construction. **609** is the code inside files that are byte-for-byte unchanged,
+so it is inherited by construction. The remainder is inherited code that was
+subsequently edited, and no honest figure describes it — most of it is still his.
 
 ---
 

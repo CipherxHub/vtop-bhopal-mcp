@@ -94,7 +94,7 @@ dead, and 404 for paths that genuinely don't exist. See
   response. `get_leave_type_rules` probes all nine types and VTOP answers with
   nothing. Only `HT1 ≤ 14` is known, from an actual rejection.
 - **No OD approval flags.** VTOP does not mark which OD days were DSW-approved,
-  so `calculate_od` cannot separate them and counts all OD days.
+  so nothing in this server can separate them, which is why there is no OD-counting tool.
 - **No internal-marks total row.** The scale differs per course, so a percentage
   computed against the published components is a lower bound, not a real figure.
 

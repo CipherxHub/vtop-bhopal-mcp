@@ -12,7 +12,6 @@ import { registerCurriculumTool } from "./tools/curriculum.js";
 import { registerAttendanceCalcTool } from "./tools/attendance-calc.js";
 import { registerTodayClassesTool } from "./tools/today.js";
 import { registerCalendarTool } from "./tools/calendar.js";
-import { registerOdCalcTool } from "./tools/od-calc.js";
 import { registerPassEligibilityTool } from "./tools/pass-eligibility.js";
 import { registerLeaveTools } from "./tools/leave.js";
 // NOTE: there is deliberately no grade predictor. Predicting a letter grade
@@ -50,7 +49,6 @@ export function createServer(
   registerAttendanceCalcTool(server, client);
   registerTodayClassesTool(server, client);
   registerCalendarTool(server, client);
-  registerOdCalcTool(server, client);
   registerPassEligibilityTool(server, client);
   registerLeaveTools(server, client);
   // registerPredictGradesTool(server, client); // inactive — see import note above

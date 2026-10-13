@@ -226,6 +226,11 @@ export function registerPassEligibilityTool(server: McpServer, client: VtopClien
           // finish with by scoring exactly the TEE minimum, not a number to aim
           // for in the TEE itself.
           totalIfTeeClearedAtMinimum: verdict?.totalIfTeeClearedAtMinimum ?? null,
+          // Three-valued on purpose: true = clear, false = a rule is already
+          // broken, null = still reachable but undecided. `status` below is the
+          // same signal as prose for humans; `canPass` is the precise one, and a
+          // null is NOT the same as a false.
+          canPass: verdict?.canPass ?? null,
           status:
             verdict?.canPass === true
               ? "PASSING"
@@ -292,8 +297,10 @@ export function registerPassEligibilityTool(server: McpServer, client: VtopClien
           "TEE makes it up. `blockers` are only rules that are already broken - a " +
           "TEE below its required mark, attendance under 75%, or a CAT that was " +
           "never attempted (no mark row at all, and no re-test to recover it). " +
-          "canPass is null while the TEE is still ahead: reachable but not decided. " +
-          "Courses with hasCats false are practical-only or project courses, where " +
+          "Read `canPass`, not `status`: it is three-valued. true = clear, false = a " +
+          "rule is already broken, null = still reachable but not yet decided. A null " +
+          "while the TEE is ahead is NOT a failure, and `status: PENDING` means exactly " +
+          "that. Courses with hasCats false are practical-only or project courses, where " +
           "the CAT rule does not apply and only CAM and the TEE count.",
         subjects,
       };

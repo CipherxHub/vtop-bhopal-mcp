@@ -13,7 +13,7 @@ This project incorporates and adapts code from the following earlier works.
    Copyright (c) 2026 Vikranth Jagdish
    Licensed under the MIT License.
 
-   Approximately 43% of the source in this repository derives from this project.
+   A substantial part of the source in this repository derives from this project.
    Six files are retained byte-for-byte (the session store, the attendance
    projection calculators and their tool wrapper, the calendar and curriculum
    tools, and the request pool).

@@ -96,16 +96,6 @@ export const LEAVE_MAX_DAYS: Partial<Record<LeaveTypeCode, number>> = {
 };
 
 /**
- * VIT Bhopal OD rule as reported by students (unconfirmed, Oct 2026):
- * about 8–9 event ODs; DSW-approved ODs are unlimited. Uses the lower bound.
- * (Upstream's Chennai rule was 40 hours per semester.)
- */
-export const OD_EVENT_LIMIT = 8;
-export const OD_RULE_NOTE =
-  "VIT Bhopal rule as understood (unconfirmed): about 8-9 event ODs allowed; DSW-approved ODs are unlimited. " +
-  "VTOP doesn't mark which ODs were DSW-approved, so every OD day is counted here. One OD day = one event day (all classes that day).";
-
-/**
  * Messages for a missing / expired session.
  *
  * The recovery instructions are no longer hand-written prose: they are derived

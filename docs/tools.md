@@ -1,6 +1,6 @@
 # Tool reference
 
-23 tools. **22 read-only, 1 writes.** Argument schemas below are the real ones
+22 tools. **21 read-only, 1 writes.** Argument schemas below are the real ones
 from `src/schemas/index.ts` — this file is generated from the same source the
 server validates against.
 
@@ -53,23 +53,6 @@ Today's classes (IST), or a given date.
 
 Holiday-aware. Knows about Saturdays that follow another weekday's timetable
 ("Activities Friday") and working Saturdays that override the weekday.
-
-### `calculate_od`
-
-OD days used this semester against the limit.
-
-**Args:** `semesterId?`, `courseCode?` (omit to total across all courses)
-
-Counts **distinct days**, from the per-class attendance detail.
-
-> **The limit is unconfirmed.** It counts against **8**, based on students'
-> understanding that ~8–9 event ODs are allowed and DSW-approved ODs are
-> unlimited. VTOP does not mark which ODs were DSW-approved, so all of them are
-> counted. Verify with your school or the DSW office.
-
----
-
-## Marks and exams
 
 ### `get_marks`
 

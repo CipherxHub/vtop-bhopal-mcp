@@ -10,7 +10,7 @@ An [MCP](https://modelcontextprotocol.io) server. Connect it to OpenCode, Claude
 
 > ### ⚠️ Exactly one tool writes to your account
 >
-> Of the 23 tools, **22 are strictly read-only.** One is not: **`apply_leave`** submits a real hostel leave application for your proctor. That is the only write.
+> Of the 22 tools, **21 are strictly read-only.** One is not: **`apply_leave`** submits a real hostel leave application for your proctor. That is the only write.
 >
 > It cannot fire by accident. It is two-step — a **preview** call validates and returns a fingerprint token without sending anything, and a **confirm** call must repeat the identical fields *and* that token. Change any field in between and it's refused. It also declares `readOnlyHint: false` so a compliant client prompts rather than auto-approving.
 >
@@ -116,15 +116,36 @@ claude mcp add vtop -s user -- node --env-file=/path/to/vtop-bhopal-mcp/.env /pa
     "servers": {
       "vtop": {
         "type": "local",
-        "command": ["node", "D:/vtop-bhopal-mcp/dist/index.js"],
-        "cwd": "D:/vtop-bhopal-mcp"
+        "command": [
+          "node",
+          "--env-file=/path/to/vtop-bhopal-mcp/.env",
+          "/path/to/vtop-bhopal-mcp/dist/index.js"
+        ]
       }
     }
   }
 }
 ```
 
+> **Do not set `cwd` on this entry.** With `cwd` present the server connects from
+> some directories and times out from others (`Request timed out`, and the log
+> shows `Received a response for an unknown message ID`). The server resolves
+> every path absolutely, so `cwd` buys nothing. This was reproduced on a second
+> machine; removing it fixed it.
+
+> **Use the config file, not `opencode mcp add`.** As of v2.0.28 the CLI rejects
+> `--env-file` after the `--` separator (`Unrecognized flag`), so the documented
+> `mcp add` route cannot pass credentials. Editing the JSON works.
+
 > **No `.env`?** Drop the `--env-file=…` argument. Node *exits* on a missing env file rather than ignoring it, which shows up as `✗ vtop failed` — so only add the flag once the file exists.
+
+> **If your client does not show the captcha image:** that is the client, not you.
+> Codex's TUI and OpenCode's plain TUI both drop MCP `image` content blocks. Since
+> 0.1.6 `get_captcha` also writes the JPEG to disk and returns the absolute path
+> as `captchaFile` (default `%TEMP%\vtop-mcp-captcha\`, override with
+> `VTOP_CAPTCHA_DIR`), so you can always open it. Never let the model guess the
+> characters — a wrong guess is a real failed login attempt, and VTOP locks
+> accounts after repeated failures.
 
 Then **start a new chat** (tools load at session start) and ask something.
 
@@ -147,7 +168,6 @@ Check it worked with `claude mcp list` (Claude Code) or `opencode mcp list` (Ope
 | 📊 | `get_semester_grades` | Grades and GPA for one semester |
 | 📊 | `get_grade_history` | CGPA, credits, courses grouped by exam month |
 | 📊 | `get_curriculum_progress` | Credits earned vs required, by category |
-| 📊 | `calculate_od` | OD days used this semester vs the limit |
 | 🗓 | `get_calendar` | Holidays, exams, events, instructional days |
 | 🗓 | `get_semesters` | All your semesters and their IDs |
 | 🗓 | `get_profile` | Name, registration number, programme, branch |
@@ -198,7 +218,6 @@ Full reference, including arguments and return shapes: **[docs/tools.md](docs/to
 - **One tool writes.** See [docs/hostel-leave.md](docs/hostel-leave.md). Everything else only reads; it never registers courses, changes marks, or touches fee and payment pages.
 - **Leave duration limits are partly unknown.** VTOP enforces them server-side and publishes none. Only Home Town ≤ 14 days is confirmed. Guessing the rest would block valid requests, so it isn't attempted.
 - **Exam overlap is a warning, not a block.** A clash is sometimes unavoidable and isn't this tool's decision to make.
-- **The OD limit is unconfirmed.** `calculate_od` counts against 8, based on students' understanding that ~8–9 event ODs are allowed and DSW-approved ODs are unlimited. VTOP doesn't mark which were DSW-approved. Verify with your school or the DSW office.
 - **Bunk calculator assumes 75%.** Check your own course rules.
 - **The HTTP connector is tested, including a live login.** 20 offline checks cover routing, auth, CORS, the MCP transport and page content; it refuses every unauthenticated request; and a full register → captcha → login → real-data pass was run against VTOP on 13 Oct 2026. What remains untested is the *network path* — whether VTOP serves a Google reCAPTCHA to your host's IP range, which is a property of where you deploy. Recipe and security notes: [docs/http-connector.md](docs/http-connector.md).
 

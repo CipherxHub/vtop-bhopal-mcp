@@ -17,8 +17,30 @@ export function registerMarksTool(server: McpServer, client: VtopClient) {
     "Get internal marks/assessment scores: per component the raw marks, max marks, weightage (the marks that component contributes to the internal total), max weightage, class average and status. Use get_internal_totals instead when you want the TOTAL for each subject rather than the component breakdown. semesterId is optional; omit for current semester. If the response contains NOT_AUTHENTICATED, follow the error's `recovery` array and retry. Requires login.",
     SemesterInputSchema.shape,
     async ({ semesterId, refresh }) => {
+      const defaulted = !semesterId;
       const id = semesterId ?? (await client.getCurrentSemesterId());
-      return parseMarks(await client.getMarksHtml(id, refresh ?? false));
+      const page = await client.getMarksHtml(id, refresh ?? false);
+      const parsed = parseMarks(page);
+      // Say WHICH semester produced an empty result. "No marks records" with
+      // no semester named is indistinguishable from a fetch failure, and the
+      // common cause mid-term is simply that the caller wanted a past semester
+      // and forgot to pass one - the tool silently defaults to the current term.
+      if (Array.isArray(parsed) && parsed.length === 0) {
+        return {
+          courses: [],
+          semesterId: id,
+          semesterWasDefaulted: defaulted,
+          note: defaulted
+            ? `No marks records found for the CURRENT semester (${id}). That is expected ` +
+              "mid-term - VTOP publishes nothing until faculty enter it. This is NOT a " +
+              "fetch failure. If the user asked about a previous semester, call again with " +
+              "that semesterId; get_semesters returns NEWEST-FIRST, so the most recent " +
+              "COMPLETED term is index 1."
+            : `No marks records found for semester ${id}. VTOP may not have published ` +
+              "assessments for this term yet.",
+        };
+      }
+      return parsed;
     },
     {
       emptyMessage:

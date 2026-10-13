@@ -194,26 +194,6 @@ async function main() {
     assert.equal(r.days[0].label, "Test Holiday");
   });
 
-  // calculate_od ------------------------------------------------------------
-  await check("calculate_od counts distinct OD days across courses", async () => {
-    const r = await callJson(client, "calculate_od");
-    assert.equal(r.eventOdLimit, 8);
-    // Both courses share the same detail fixture: 2 OD classes each, on the same
-    // 2 dates → 4 OD classes but only 2 OD days.
-    assert.equal(r.perCourse.length, 2);
-    assert.equal(r.perCourse[0].odClasses, 2);
-    assert.equal(r.odClasses, 4);
-    assert.equal(r.odDays, 2);
-    assert.deepEqual(r.odDates, ["03-Jan-2026", "05-Jan-2026"]);
-    assert.equal(r.remainingOdDays, 6);
-    assert.equal(r.overLimit, false);
-    assert.match(r.note, /unconfirmed/);
-  });
-  await check("calculate_od filters to one course", async () => {
-    const r = await callJson(client, "calculate_od", { courseCode: "BTST101L" });
-    assert.equal(r.perCourse.length, 1);
-    assert.equal(r.odDays, 2);
-  });
 
   await client.close();
   await server.close();

@@ -65,6 +65,47 @@ follows [Semantic Versioning](https://semver.org/).
 - The landing page covers every MCP client rather than ChatGPT alone, and the
   registration field enforces the real registration-number shape as you type.
 
+- **Captcha file fallback.** `get_captcha` now also writes the JPEG to disk
+  and returns the absolute path as `captchaFile` (default
+  `%TEMP%\vtop-mcp-captcha\`, override with `VTOP_CAPTCHA_DIR`). The MCP `image`
+  content block is still returned first, so clients that render it are unaffected.
+- **Three-misread escalation in `login`.** After three consecutive rejected
+  captchas the server returns an explicit "stop and ask the user" error naming the
+  account-lock risk, instead of the generic retry hint.
+- **`canPass` on `check_pass_eligibility` subjects.** The three-valued verdict
+  (true / false / null) is now in the payload. It was computed and then folded
+  into `status`, while the tool's own note told the model to read a field that
+  was not there.
+- **`get_marks` names its semester on an empty result**, and says whether that
+  semester was defaulted, so "no marks" is distinguishable from a fetch failure.
+- **`get_semesters` documents its ordering.** VTOP returns newest-first: index 0
+  is the in-progress term and the LAST element is the oldest. Nothing said so, and
+  taking the last element silently returns the student's first semester.
+
+- **Login was impossible in clients that do not render MCP `image` content blocks**
+  (confirmed on Codex's TUI and OpenCode's plain TUI). The captcha was returned
+  ONLY as an image block, so those clients could not obtain it at all. The model
+  was asked to read an image it could not see, guessed a plausible-looking string,
+  and each guess was a real failed login against a student's account - three in a
+  row observed in the wild. `get_captcha` now also hands over a file, and the
+  response says explicitly never to guess.
+- **README: the OpenCode MCP example did not work.** It set `cwd`, which made the
+  server connect from some directories and time out from others (`Received a
+  response for an unknown message ID`), and it omitted `--env-file`, so credentials
+  silently never loaded.
+- **Removed `calculate_od`.** It was the only tool returning a number VTOP never
+  gave: `eventOdLimit: 8` came from a constant documented as an unconfirmed student
+  report. The honesty lived in a `note` string while the fields themselves read as
+  fact. VTOP does not mark which absences were OD-approved, so the tool could not
+  separate them anyway. Every remaining tool reports only what VTOP returns.
+- **Dependency audit: 16 advisories down to 1.** Includes a critical `proxy-addr`
+  IP-spoofing bug inside the `trust proxy` path the HTTP connector relies on, a
+  high-severity MCP SDK advisory, and ~20 axios advisories on the package that
+  makes every VTOP request. The one remaining (`esbuild`, low) is a transitive
+  dev-dependency of `tsup` and affects only the dev server, which this project does
+  not run.
+- **281 offline checks across 12 suites** (was 280).
+
 ### Known limitations
 - Connector tokens live in a URL. Expiry bounds the exposure; eliminating it
   needs opaque server-side tokens and a store.

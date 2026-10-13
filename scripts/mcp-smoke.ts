@@ -4,7 +4,7 @@
  *
  * Spawns dist/index.js and exchanges JSON-RPC messages over stdio to verify:
  *   1. initialize handshake succeeds and serverInfo.name === "vtop-mcp"
- *   2. tools/list returns exactly the 17 expected tools with proper schemas
+ *   2. tools/list returns exactly the 22 expected tools with proper schemas
  *   3. (network-permitting) tools/call get_captcha returns an image content item
  *
  * Steps 1 and 2 work without VIT network — useful as a CI sanity check.
@@ -34,7 +34,6 @@ const EXPECTED_TOOLS = [
   "calculate_attendance",
   "get_today_classes",
   "get_calendar",
-  "calculate_od",
   "check_pass_eligibility",
   "get_leave_types",
   "get_leave_status",
@@ -255,11 +254,25 @@ async function main() {
         arguments: {},
       });
       if (res.error) throw new Error(res.error.message);
-      const r = res.result as { content?: { type: string }[]; isError?: boolean };
+      const r = res.result as {
+        content?: { type: string }[];
+        isError?: boolean;
+        structuredContent?: { data?: { captchaFile?: string | null } };
+      };
       if (r.isError) throw new Error("tool returned isError=true");
       const hasImage = (r.content ?? []).some((c) => c.type === "image");
       if (!hasImage) throw new Error("no content item of type 'image' in response");
+
+      // The image block alone is not enough: Codex's TUI and OpenCode's plain
+      // TUI both drop it, and a model that cannot see the captcha guesses - and
+      // every guess is a failed login against a real account. Assert the file
+      // fallback actually ships in the tool payload, not just in the source.
+      const capFile = r.structuredContent?.data?.captchaFile;
+      if (!capFile) throw new Error("captchaFile missing - image-blind clients have no fallback");
+      if (!existsSync(capFile)) throw new Error(`captchaFile points at a missing file: ${capFile}`);
+
       results.push({ name: "tools/call get_captcha", status: "PASS" });
+      results.push({ name: "captcha file fallback", status: "PASS", note: capFile });
     } catch (err: unknown) {
       results.push({
         name: "tools/call get_captcha",

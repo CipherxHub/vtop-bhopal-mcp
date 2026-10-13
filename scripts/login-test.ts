@@ -11,6 +11,12 @@
  */
 
 import assert from "node:assert/strict";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, isAbsolute, join as pathJoin } from "node:path";
+import { tmpdir } from "node:os";
+import * as os from "node:os";
+import * as path from "node:path";
+import { saveCaptchaFile, captchaDir } from "../src/services/captcha-file.js";
 import { VtopClient } from "../src/services/vtop-client.js";
 import { VtopError, classify, isNotAuthenticated, type VtopErrorCode } from "../src/services/errors.js";
 import { errorResult } from "../src/tools/_helpers.js";
@@ -82,6 +88,58 @@ async function main() {
     await check("getCaptcha returns a base64 PNG data URL", () => {
       assert.match(img, /^data:image\/png;base64,[A-Za-z0-9+/=]+$/);
     });
+
+    // --- captcha file fallback (image-blind clients) -------------------------
+    // Observed twice in the wild: Codex's TUI and OpenCode's plain TUI both
+    // drop MCP `image` content blocks, so the model was asked to read an image
+    // it could not see. It guessed, three times, and each guess was a real
+    // failed login against the student's account. The captcha is now also
+    // written to disk so those clients have something they can actually open.
+    const capDir = path.join(os.tmpdir(), "vtop-captcha-test");
+    await check("captcha is written to disk for clients that cannot render images", async () => {
+      rmSync(capDir, { recursive: true, force: true });
+      process.env.VTOP_CAPTCHA_DIR = capDir;
+      const m = img.match(/^data:(image\/[^;]+);base64,(.+)$/);
+      assert.ok(m, "captcha should be a data URL");
+      const file = saveCaptchaFile(m[1], m[2]);
+      assert.ok(file, "saveCaptchaFile should return a path");
+      assert.ok(isAbsolute(file), `captcha path must be absolute, got ${file}`);
+      assert.ok(existsSync(file), `captcha file should exist at ${file}`);
+      assert.equal(
+        readFileSync(file).toString("base64").replace(/=+$/, ""),
+        m[2].replace(/=+$/, ""),
+        "file bytes must match the image block",
+      );
+      assert.match(basename(file), /^captcha-.+\.png$/, "filename should be predictable");
+      delete process.env.VTOP_CAPTCHA_DIR;
+    });
+    await check("captcha path honours VTOP_CAPTCHA_DIR", () => {
+      process.env.VTOP_CAPTCHA_DIR = "D:\\somewhere\\else";
+      assert.equal(captchaDir(), "D:\\somewhere\\else");
+      delete process.env.VTOP_CAPTCHA_DIR;
+      assert.equal(captchaDir(), path.join(os.tmpdir(), "vtop-mcp-captcha"));
+    });
+    await check("a failed captcha write degrades instead of breaking login", () => {
+      // An unwritable dir must never be fatal: the image block still carries
+      // the captcha, so returning null is correct and throwing is not.
+      // Use a regular FILE as a path component, so mkdir fails with ENOTDIR.
+      const m = img.match(/^data:(image\/[^;]+);base64,(.+)$/);
+      assert.ok(m);
+      const blocker = path.join(os.tmpdir(), "vtop-captcha-blocker");
+      writeFileSync(blocker, "not a directory");
+      try {
+        process.env.VTOP_CAPTCHA_DIR = path.join(blocker, "captchas");
+        assert.equal(
+          saveCaptchaFile(m[1], m[2]),
+          null,
+          "an unwritable directory must yield null, not throw",
+        );
+      } finally {
+        delete process.env.VTOP_CAPTCHA_DIR;
+        rmSync(blocker, { force: true });
+      }
+    });
+
     await check("login marks the session authenticated", () => {
       assert.equal(client.isAuthenticated, true);
     });

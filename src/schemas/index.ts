@@ -70,16 +70,6 @@ export const CalcAttendanceSchema = z.object({
     ),
 });
 
-export const OdCalcSchema = z.object({
-  semesterId: z
-    .string()
-    .optional()
-    .describe("Semester ID. If omitted, uses the current semester."),
-  courseCode: z
-    .string()
-    .optional()
-    .describe("Limit to one course code (e.g. 'BCSE302L'). Omit to total OD across all courses."),
-});
 
 export const CalendarSchema = z.object({
   semesterId: z

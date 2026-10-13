@@ -3,7 +3,14 @@ import { VtopClient } from "../services/vtop-client.js";
 import type { Credentials } from "../types/index.js";
 import { LoginSchema, EmptySchema } from "../schemas/index.js";
 import { mkJsonTool, errorResult } from "./_helpers.js";
+import { saveCaptchaFile } from "../services/captcha-file.js";
 import { VtopError, type VtopErrorBody } from "../services/errors.js";
+
+/** Rejected captcha attempts in a row before we hand the problem to the user. */
+const CAPTCHA_MISREAD_LIMIT = 3;
+
+/** Process-local misread counter. Reset on any successful login. */
+let captchaMisreads = 0;
 
 export function registerAuthTools(
   server: McpServer,
@@ -13,7 +20,7 @@ export function registerAuthTools(
   // get_captcha returns an image content item, not JSON — use server.tool directly.
   server.tool(
     "get_captcha",
-    "Step 1 of login: fetch a CAPTCHA image from VTOP. Returns the image so you (the model) can OCR it. After this, immediately call `login` with the captcha text you read — do NOT ask the user to read it for you. The user only needs to be asked for credentials if VTOP_USERNAME / VTOP_PASSWORD are not set as env vars on the server. Failures come back as structuredContent.error.code (e.g. RECAPTCHA_REQUIRED, CAPTCHA_NOT_FOUND) with an ordered `recovery` plan.",
+    "Step 1 of login: fetch a CAPTCHA image from VTOP. Returns the image AND saves it to a file. CRITICAL - never invent the characters. If no image is rendered above, you cannot read the captcha: do NOT guess. Open `captchaFile` from the response and read that, or ask the user to open it and tell you the characters. A guess is always wrong and counts as a real failed login attempt against the student's account. After reading it, immediately call `login` — the image is only valid for 30-60 seconds. Failures come back as structuredContent.error.code (e.g. RECAPTCHA_REQUIRED, CAPTCHA_NOT_FOUND) with an ordered `recovery` plan.",
     EmptySchema.shape,
     // Reads a captcha + arms the prelogin session: not read-only, but not
     // destructive either (no user data is changed). The hints stop MCP clients
@@ -38,18 +45,42 @@ export function registerAuthTools(
         const dataUrl = await client.getCaptcha();
         const match = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
         if (match) {
+          // Save a copy so clients that drop `image` content blocks still have
+          // a way to reach it. The image block stays first for clients that
+          // render it — this is additive, not a replacement.
+          const captchaFile = saveCaptchaFile(match[1], match[2]);
+          const text = captchaFile
+            ? "Captcha retrieved. The image is attached above AND saved to a file.\n\n" +
+              `If you can see the attached image, read it and call \`login\`. If NO image is ` +
+              `rendered above, your client does not display image content blocks: open ` +
+              `${captchaFile} and read that instead. NEVER guess the characters - a wrong ` +
+              `guess is a real failed login attempt against the student's account, and VTOP ` +
+              `locks accounts after repeated failures. The image expires in 30-60 seconds.`
+            : "Captcha retrieved (attached above). If no image is rendered, your client does " +
+              "not display image content blocks and the file save failed - ask the user to fetch " +
+              "it themselves rather than guessing. NEVER guess the characters.";
+
           return {
             content: [
               { type: "image" as const, data: match[2], mimeType: match[1] },
-              {
-                type: "text" as const,
-                text:
-                  "Captcha image retrieved. Read the text in the image and use it with the login tool. If you cannot read it, call get_captcha again for a new one.",
-              },
+              { type: "text" as const, text },
             ],
             structuredContent: {
               ok: true,
-              data: { captchaReturned: true, mimeType: match[1] },
+              data: {
+                captchaReturned: true,
+                mimeType: match[1],
+                captchaFile,
+                imageRendered: false,
+                instructions: {
+                  canReadImage: "Read the attached image, then call login immediately.",
+                  cannotSeeImage:
+                    "Your client is not rendering image content blocks. Open `captchaFile` " +
+                    "and read the characters from it, or ask the user to open it. Do not guess.",
+                  expiresInSeconds: "30-60",
+                  neverGuess: true,
+                },
+              },
             },
           };
         }
@@ -98,11 +129,40 @@ export function registerAuthTools(
       }
       try {
         const result = await client.login(user, pass, captcha);
+        captchaMisreads = 0;
         return {
           content: [{ type: "text" as const, text: result.message }],
           structuredContent: { ok: true, data: { success: true } },
         };
       } catch (err: unknown) {
+        // Escalate rather than let the model burn the account.
+        //
+        // docs/errors.md has always said "after three misreads the assistant
+        // should show you the image and ask", but that was prose, not
+        // behaviour, and it did not survive contact with reality: observed in
+        // the wild, a model that could not see the captcha guessed three times
+        // in a row, each guess a real failed login against a student's VTOP
+        // account. VTOP locks accounts on repeated failures, so a fourth guess
+        // can cost the student access until someone resets it in a browser.
+        if (err instanceof VtopError && err.code === "INVALID_CAPTCHA") {
+          captchaMisreads += 1;
+          if (captchaMisreads >= CAPTCHA_MISREAD_LIMIT) {
+            captchaMisreads = 0;
+            return errorResult(
+              new VtopError(
+                "INVALID_CAPTCHA",
+                `Rejected ${CAPTCHA_MISREAD_LIMIT} times in a row. STOP retrying — do not ` +
+                  "call login or get_captcha again on your own.\n\n" +
+                  "Ask the user for help: tell them the captcha could not be read, show the " +
+                  "image file path from the last get_captcha call, and ask them to open it and " +
+                  "type the characters back to you. VTOP locks accounts after repeated failed " +
+                  "attempts, so continuing to guess risks the student losing access until it is " +
+                  "reset in a browser.",
+                "Repeated captcha misreads — human assistance required.",
+              ),
+            );
+          }
+        }
         return errorResult(err);
       }
     }
@@ -197,7 +257,7 @@ export function registerAuthTools(
   mkJsonTool(
     server,
     "get_semesters",
-    "Get list of available semesters (id + name). Most data tools accept the semesterId, but they also default to the current semester if omitted — so you usually don't need to call this unless the user asks about a specific past semester. On failure the response carries structuredContent.error.code; if it is NOT_AUTHENTICATED, follow the error's `recovery` array (get_captcha then login) and retry this tool.",
+    "Get list of available semesters (id + name). IMPORTANT ORDERING: VTOP returns these NEWEST-FIRST -- index 0 is the current (in-progress) term and the LAST element is the OLDEST. To reach the most recent COMPLETED term use index 1, not the last element; taking the last element silently returns the student's first semester. Most data tools accept the semesterId, but they also default to the current semester if omitted — so you usually don't need to call this unless the user asks about a specific past semester. On failure the response carries structuredContent.error.code; if it is NOT_AUTHENTICATED, follow the error's `recovery` array (get_captcha then login) and retry this tool.",
     EmptySchema.shape,
     async () => client.getSemesters(),
     { emptyMessage: "No semesters found. You may not be enrolled yet." }

@@ -34,7 +34,6 @@ const EXPECTED_TOOLS = [
   "get_today_classes",
   "get_calendar",
   "calculate_gpa",
-  "calculate_od",
 ].sort();
 
 type JsonRpcResponse = {
