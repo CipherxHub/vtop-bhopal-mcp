@@ -1,22 +1,34 @@
 # VTOP Bhopal MCP
 
-> Ask your AI assistant about your **VIT Bhopal** VTOP account: attendance, marks, timetable, exams, grades, the academic calendar, and "how many classes can I still skip?".
+> Ask your AI assistant about your **VIT Bhopal** VTOP account: attendance, marks, timetable, exams, grades, pass eligibility, the academic calendar, hostel leave — and "how many classes can I still skip?".
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 ![Node 20.6+](https://img.shields.io/badge/node-%E2%89%A520.6-brightgreen)
 ![MCP](https://img.shields.io/badge/MCP-stdio-purple)
 
-This is an [MCP](https://modelcontextprotocol.io) server. Once it's connected to Claude Code, Claude Desktop, Cursor or any other MCP client, you can just ask:
+This is an [MCP](https://modelcontextprotocol.io) server. Once it's connected to OpenCode, Claude Code, Claude Desktop, Cursor or any other MCP client, you can just ask:
 
 > *"What's my attendance?"*
 > *"Which classes do I have on Monday?"*
-> *"Can I skip any more Analog classes before the last instructional day?"*
-> *"When is my Chemistry FAT, and where?"*
-> *"What GPA do I need next semester to reach an 8 CGPA?"*
+> *"How many more classes can I skip and still hold 75%?"*
+> *"When is my Security Engineering FAT, and where?"*
+> *"What do I need to score in the TEE to pass?"*
+> *"Is my hostel leave approved yet?"*
 
-The assistant logs in to VTOP for you (it reads the captcha itself), fetches the page, and answers in plain language.
+The assistant logs in to VTOP for you, fetches the page, and answers in plain language.
 
-It's a fork of [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP), which was built for VIT Chennai. VIT Bhopal's VTOP looks similar but differs in many places, so this fork reworks the endpoints and parsers for Bhopal and has been tested against the live Bhopal portal.
+It's a fork of [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP), which was built for VIT Chennai. VIT Bhopal's VTOP runs on the same platform but differs in many places, so this fork reworks the endpoints and parsers for Bhopal and has been tested against the live Bhopal portal.
+
+---
+
+> ### ⚠️ This is not a read-only server
+>
+> 18 of the 23 tools only read. **One writes: `apply_leave`**, which submits a real
+> hostel leave application to your proctor.
+>
+> It is built to be safe — it previews before submitting, and a write can never
+> happen without a second, deliberate call — but you should know it exists before
+> you connect it. See [Hostel leave](#hostel-leave) for exactly what it does.
 
 ---
 
@@ -26,6 +38,7 @@ It's a fork of [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP), which was
 - [Quick start](#quick-start)
 - [Connect it to your assistant](#connect-it-to-your-assistant)
 - [How login works](#how-login-works)
+- [Hostel leave](#hostel-leave)
 - [Privacy and security](#privacy-and-security)
 - [What's different from the Chennai version](#whats-different-from-the-chennai-version)
 - [Troubleshooting](#troubleshooting)
@@ -37,6 +50,8 @@ It's a fork of [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP), which was
 
 ## What it can do
 
+**Read tools** (18)
+
 | Tool | What you get |
 |---|---|
 | `get_attendance` | Attended / total / percentage per course |
@@ -44,17 +59,32 @@ It's a fork of [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP), which was
 | `get_today_classes` | Classes for today or any date, with times and rooms. Knows about holidays and Saturdays that follow another weekday's timetable. |
 | `get_timetable` | Registered courses with slots, venues, faculty and credits |
 | `get_marks` | CAT and other internal-assessment marks with weightage |
-| `get_internal_totals` | Total marks scored per subject this semester, with a per-course breakdown |
+| `get_internal_totals` | Total marks scored per subject this semester, with a per-course breakdown and every component still to come |
 | `get_exam_schedule` | CAT-1, CAT-2 and FAT dates, sessions, times, venues and seats |
+| `check_pass_eligibility` | What you need to score to pass, per course, in **both** scales — and which classes or exams a leave would cost you |
 | `get_semester_grades` | Grades and GPA for one semester |
 | `get_grade_history` | CGPA, credits, and every course grouped by exam month |
 | `get_curriculum_progress` | Credits earned vs required, by category and basket |
 | `calculate_od` | On-Duty days used this semester vs the event-OD limit ([see note](#limitations)) |
 | `get_calendar` | Academic calendar: holidays, exams, events, instructional days |
 | `get_profile` | Name, registration number, programme and branch, school |
-| `session_status` | Whether you're logged in, as whom, and whether VTOP still honours the session |
 | `get_semesters` | All your semesters and their IDs |
+| `get_leave_types` | The hostel leave types VTOP currently offers, read from the live form |
+| `get_leave_status` | Your leave applications: id, type, dates, approval status, approver remarks, gate-pass flags |
+| `session_status` | Whether you're logged in, as whom, and whether VTOP still honours the session |
 | `get_captcha`, `login`, `logout` | Used by the assistant to sign in and out |
+
+**Write tool** (1)
+
+| Tool | What it does |
+|---|---|
+| `apply_leave` | Applies for hostel leave on VTOP. **Two-step** — see [Hostel leave](#hostel-leave) |
+
+**Diagnostic** (1)
+
+| Tool | What it does |
+|---|---|
+| `get_leave_type_rules` | Asks VTOP what rules apply to each leave type by replaying the dropdown's own request. Never submits anything. |
 
 Every per-semester tool picks the current semester automatically, so you rarely need to name one.
 
@@ -65,7 +95,7 @@ Every per-semester tool picks the current semester automatically, so you rarely 
 You need **Node.js 20.6 or newer** (`node -v` to check) and **git**.
 
 ```bash
-git clone https://github.com/divyarthjain/vtop-bhopal-mcp.git
+git clone https://github.com/YOUR-USERNAME/vtop-bhopal-mcp.git
 cd vtop-bhopal-mcp
 npm install
 npm run build
@@ -119,6 +149,7 @@ Check it, then restart the background service if it still looks stale:
 
 ```sh
 opencode mcp list      # ✓ vtop  connected
+opencode service restart   # only if the tool list looks out of date
 ```
 
 Tools appear as `vtop_*`, e.g. `vtop_get_attendance`, `vtop_session_status`.
@@ -188,14 +219,70 @@ Use the same `command` and `args` as the Claude Desktop example in your client's
 Things to know:
 
 - **Sessions idle out after ~20 minutes.** VTOP signs a session out after roughly 20 minutes of *inactivity* — it is an idle timeout, not a fixed lifetime from login. The server therefore touches the session every 5 minutes by default (`VTOP_KEEPALIVE_MINUTES`), so an open session stays usable indefinitely. If a session does lapse (a long network outage, a server restart), the assistant logs in again and you may see it read a new captcha.
-- **Sometimes VTOP shows a Google reCAPTCHA** instead of the text captcha. The server reloads the login page a few times until the text captcha appears, so this is usually invisible to you.
-- **A misread captcha isn't a problem.** The assistant fetches a new one and tries again.
+- **Sometimes VTOP shows a Google reCAPTCHA** instead of the text captcha. The server reloads the login page a few times until the text captcha appears, so this is usually invisible to you. If it persists, wait a few minutes — repeated attempts escalate VTOP's risk scoring.
+- **Captchas expire in well under a minute.** The assistant fetches one and submits it immediately. If a read is ever missed, ask it for a fresh captcha and type the characters yourself — that's faster and more reliable than a re-read. The image is upscaled 5× server-side so it stays legible in clients that would otherwise render a 200×40 image as a smear.
 
-- **Captchas expire quickly.** VTOP's captchas are short-lived, so read the image
-  and submit `login` straight away — a long pause between the two reads means
-  `INVALID_CAPTCHA`. The returned image is upscaled 5x server-side so it stays
-  legible in clients that would otherwise render a 200x40 image as an
-  unreadable smear.
+---
+
+## Hostel leave
+
+`apply_leave` is the one tool that **writes to VTOP**. It creates a real
+application that your hostel proctor has to action, so it is deliberately
+two-step.
+
+**Call 1 — preview.** Pass the details and leave `confirm` unset. Nothing is
+sent. You get back the normalised values, every rule that fired, a
+`previewToken`, and what the leave would cost you:
+
+- **classes** it would make you miss, from your timetable and the academic calendar
+- **exams** it would clash with, compared against the *hours* you are away —
+  a leave starting at 17:00 does not cost you a 13:15–16:15 paper, one starting
+  at 08:00 does. An exam with no published time is reported as `UNKNOWN`,
+  never assumed clear.
+
+**Call 2 — submit.** Repeat the *identical* fields plus `confirm: true` and the
+`previewToken`. The token is a fingerprint over every submitted field, so if
+anything changed since the preview the submission is **refused** and you must
+preview again. That is what stops "confirm" from drifting onto a request you
+never actually saw.
+
+**Tell the assistant to show you the preview before confirming.**
+
+```jsonc
+// "apply for a day outing on the 20th, Sehore, 9am to 6pm, family function"
+{ "leaveCode": "OG1", "visitingPlace": "Sehore",
+  "leaveFromDate": "2026-10-20", "fromTime": "9:00 AM",
+  "leaveToDate": "2026-10-20", "toTime": "6:00 PM",
+  "reason": "Family function in Sehore." }
+```
+
+Leave types are read from VTOP's live dropdown, not hard-coded:
+
+| Code | Type | Code | Type |
+|---|---|---|---|
+| `SO` | Special Outing | `WV` | Winter Vacation |
+| `WP` | With Parent Leave | `HT1` | Home Town |
+| `EP` | Official Leaves | `LG1` | Local Guardian |
+| `SV` | Summer Vacation | `EY1` | Emergency Leave |
+| | | `OG1` | **Day Outing** |
+
+Rules enforced before anything is sent:
+
+- **A Day Outing (`OG1`) must return by 18:00**, inclusive — 18:00 passes,
+  18:01 is refused. The deadline applies to that type only; other types are
+  allowed later but produce a warning, because a proctor may still query it.
+- Times are normalised first, so `6:00 PM`, `1800` and `8.30` all work, and the
+  preview and the submission always see identical values.
+- Dates must be ISO `YYYY-MM-DD` and not in the past; the return cannot precede
+  the departure; visiting place is required and capped at VTOP's 150 characters;
+  reason is required.
+
+**On duration limits:** VTOP enforces a maximum length per leave type
+server-side and publishes none of them — not in the form markup, not in the
+dropdown's response. The only cap confirmed is **Home Town ≤ 14 days**. The tool
+refuses that one case locally and deliberately does *not* guess the others:
+inventing a limit would block applications VTOP would have accepted. If VTOP
+rejects a request, nothing is created and you can apply under another type.
 
 ---
 
@@ -204,7 +291,8 @@ Things to know:
 - **Your login only goes to VTOP.** The server runs on your own computer and talks directly to `vtop.vitbhopal.ac.in`. It never sends your username or password anywhere else.
 - **Nothing is stored except what you choose.** Session cookies live in memory and vanish when the server stops. Your password is stored only in your own `.env` file, if you create one.
 - **Your assistant sees your data.** Whatever the tools return (marks, attendance and so on) goes to the AI assistant you connected, the same as anything else you ask it about.
-- **The test scripts save raw VTOP pages** to `test-output/`. Those pages contain your personal data, which is why that folder is git-ignored. Don't share it.
+- **`apply_leave` writes to your VTOP account.** Everything else only reads. See [Hostel leave](#hostel-leave).
+- **Test scripts save raw VTOP pages** to `test-output/` when `VTOP_DUMP_HTML=1`. Those pages contain your personal data, which is why that folder is git-ignored. Don't share it.
 - **`.env` is plain text.** Keep it `chmod 600` and don't commit it.
 
 ---
@@ -224,29 +312,33 @@ VIT Bhopal's VTOP runs on the same platform as Chennai's but differs in the deta
 | Grade history | grouped by exam month | same, but course codes like `ENG1004` were being mistaken for months; `P` (pass) grades are now kept out of GPA |
 | Profile branch | "Branch" field | taken from the grade-history header (the profile page only has the Class 12 stream) |
 | Calendar | one entry per day | every student group listed per day; only the "General" entry is used. Saturdays marked "Activities Friday" follow Friday's timetable. |
+| Timetable | grid returned empty rows | course cells carry a nested `sessions` array; the grid is merged into it so day and times are populated |
+| Leave | not supported | `hostels/student/leave/1..4`, driven by a `control` parameter rather than separate paths |
 | OD limit | 40 hours per semester | event-OD days ([see note](#limitations)) |
 
-The Bhopal-specific layouts are covered by offline test fixtures (synthetic data only) in `scripts/fixtures.ts`.
+The Bhopal-specific layouts are covered by offline test fixtures in `scripts/fixtures.ts` and `scripts/*-test.ts`. **Those fixtures use synthetic data only** — see [CONTRIBUTING.md](CONTRIBUTING.md) for the rule and the guard that enforces it.
 
 ---
 
 ## Troubleshooting
 
-**The assistant doesn't see the VTOP tools.** Start a new session after adding the server; tools load at startup. In Claude Code, `claude mcp list` should show `✔ Connected`.
+**The assistant doesn't see the VTOP tools.** Start a new session after adding the server; tools load at startup. In Claude Code, `claude mcp list` should show `✔ Connected`. In OpenCode, `opencode service restart` re-reads the config.
 
 **`node: bad option: --env-file`.** Your Node is older than 20.6. Update Node, or drop the `--env-file` argument and log in through the chat.
 
-**A tool returns `error.code: RECAPTCHA_REQUIRED`.** VTOP served Google reCAPTCHA instead of the readable image captcha, usually because your IP looks like a datacenter. Wait a few minutes and retry, or set `VTOP_PROXY_URL` to a residential proxy.
+**A tool returns `error.code: RECAPTCHA_REQUIRED`.** VTOP served Google reCAPTCHA instead of the readable image captcha, usually because your IP looks like a datacenter or you have attempted several logins recently. Wait a few minutes and retry, or set `VTOP_PROXY_URL` to a residential proxy.
+
+**A tool returns `error.code: ENDPOINT_NOT_FOUND`.** VTOP has no endpoint at that path. **Do not log in again** — the session is fine; the route is wrong or has been renamed. Please [open an issue](https://github.com/YOUR-USERNAME/vtop-bhopal-mcp/issues).
 
 **Login keeps failing with `SESSION_MISMATCH` (HTTP 404).** The captcha belonged to a different VTOP session than the login POST. Fetch a fresh captcha and retry — don't reuse the old one.
 
 **"Invalid username or password".** Check `.env` for typos and stray spaces around `=`. Try logging in on the VTOP website to be sure.
 
-**Login keeps failing on the captcha.** It's usually a misread; the assistant retries. If VTOP keeps serving the Google reCAPTCHA, wait a few minutes and try again.
+**Login keeps failing on the captcha.** It expires fast. Ask the assistant for a fresh captcha and type the characters yourself.
 
 **`timeout of 30000ms exceeded`.** VTOP is slow (common late at night or on result days). Add `VTOP_TIMEOUT_MS=60000` to your `.env`.
 
-**A tool returns empty data while you can see it on the website.** VTOP's pages change from time to time. Please [open an issue](https://github.com/divyarthjain/vtop-bhopal-mcp/issues) with the tool name and what you expected. **Don't paste raw pages or screenshots that show personal details.**
+**A tool returns empty data while you can see it on the website.** VTOP's pages change from time to time. Please [open an issue](https://github.com/YOUR-USERNAME/vtop-bhopal-mcp/issues) with the tool name and what you expected. **Don't paste raw pages or screenshots that show personal details.**
 
 ---
 
@@ -256,11 +348,17 @@ The Bhopal-specific layouts are covered by offline test fixtures (synthetic data
 npm install
 npm run build          # compile to dist/
 npm run typecheck      # tsc --noEmit (the build itself does NOT typecheck)
-npm run test:parser    # offline parser checks (Chennai + Bhopal fixtures)
+npm run test:parser    # offline parser checks (Bhopal fixtures)
 npm run test:tools     # offline tool checks with a fake VTOP client
 npm run test:login     # offline login-handshake checks against a mock VTOP
+npm run test:exam      # pass-rule arithmetic
+npm run test:leave     # leave validation, fingerprints, exam overlap
+npm run test:privacy   # fixture hygiene guard
 npm run test:all       # everything above, then build + MCP protocol smoke test
 ```
+
+Every suite except the `e2e` ones is **offline and needs no VTOP account**, which
+is deliberate so the suite is safe to run in CI.
 
 `npm run test:login` starts a local mock of the VTOP portal (TLS, throwaway
 self-signed cert generated into the temp dir — nothing is written to the repo)
@@ -290,7 +388,14 @@ branch on a stable `code` instead of parsing English:
 Codes: `NOT_AUTHENTICATED`, `CREDENTIALS_REQUIRED`, `INVALID_CAPTCHA`,
 `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `MAX_LOGIN_ATTEMPTS`,
 `SESSION_MISMATCH`, `RECAPTCHA_REQUIRED`, `CAPTCHA_NOT_FOUND`, `TIMEOUT`,
-`NETWORK`, `UPSTREAM`.
+`NETWORK`, `ENDPOINT_NOT_FOUND`, `UPSTREAM`.
+
+`ENDPOINT_NOT_FOUND` is deliberately distinct from `NOT_AUTHENTICATED`. VTOP
+serves 404 for some endpoints when a session is dead, but it also serves 404 for
+a path that simply does not exist. Treating the latter as a dead session used to
+log you out of a perfectly good one and send you round the captcha loop for
+nothing; now the session is verified against a known-good endpoint before it is
+condemned.
 
 `recovery` is the ordered list of tools to call; `needsUserInput` tells you
 whether a human has to supply something first. The human-readable text and the
@@ -304,29 +409,12 @@ and whether credentials are configured — and it verifies the session against
 VTOP, so a session that died server-side is caught there rather than on your
 next question.
 
-Live checks against the real portal (needs your login in `.env`; you type the captcha):
+### Write tools and MCP permissions
 
-```bash
-npm run test:e2e                        # core tools, parser level
-VTOP_MCP_TOOLS=1 npm run test:e2e       # every tool through the real MCP server
-VTOP_MENU_DUMP=1 npm run test:e2e       # list VTOP's menu pages and save them
-VTOP_DUMP_HTML=1 npm run test:e2e       # also save raw HTML to test-output/
-```
-
-Useful environment variables:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `VTOP_USERNAME` / `VTOP_PASSWORD` | none | Auto-login. Without them the assistant asks in chat. |
-| `VTOP_BASE_URL` | `https://vtop.vitbhopal.ac.in/vtop` | Portal address |
-| `VTOP_TIMEOUT_MS` | `30000` | Per-request timeout |
-| `VTOP_KEEPALIVE_MINUTES` | `5` | How often to touch VTOP so an idle session survives its ~20 min timeout. `0` disables all background traffic. |
-| `VTOP_CAPTCHA_SCALE` | `5` | Upscale factor for the returned captcha (200x40 → 1000x200). `1` returns it untouched. |
-| `VTOP_DUMP_CAPTCHA` | unset | `1` also writes each raw captcha to `VTOP_DUMP_DIR` (default `test-output/`). Debug aid. |
-
-The upstream HTTP / ChatGPT-connector mode (`dist/http.js`) is still included but hasn't been tested on Bhopal.
-
----
+Tools that write to VTOP declare `readOnlyHint: false` so a compliant MCP client
+raises a permission prompt instead of auto-approving. The smoke test asserts
+this, so a new write path cannot silently inherit the read-only default and
+skip the prompt entirely.
 
 ### No grade or GPA predictor, on purpose
 
@@ -334,8 +422,17 @@ There is deliberately **no tool that predicts a letter grade**, and no
 `calculate_gpa`. VIT awards letter grades *relatively* — against the class
 average and its spread — and VTOP exposes neither, so any prediction would be
 the user supplying a guess and getting a guess back. `get_grade_history` and
-`get_semester_grades` report the grades VTOP actually awarded, and
-`get_internal_totals` reports your real marks. Nothing extrapolates.
+`get_semester_grades` report the grades VTOP actually awarded,
+`get_internal_totals` reports your real marks, and `check_pass_eligibility`
+reports the thresholds the published rules impose. Nothing extrapolates.
+
+### Fixture data — synthetic only
+
+Tests may mirror the real **shape** of a VTOP response (field names, dropdown
+order, column order, printed date formats) because that cannot be guessed. They
+must never carry real **values**. `npm run test:privacy` fails the build if
+identifiable data appears, and matches patterns rather than a blocklist so it
+catches fresh leaks. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Internal marks totals — read the percentages carefully
 
@@ -352,21 +449,28 @@ The percentages are not, and the tool says so on every call:
   course with labs and tutorial assessments listed seven components totalling
   65.
 
-So a course at 28.8 of a published 30 reports 96%, when against its real 50 it
-is 57.6%. Treat `scoredSoFar` as the number to trust and any percentage as a
-lower bound. The returned `note` repeats this to the assistant on every call.
+So a course that reports a high percentage against a small published total may
+look far stronger against its real total than it is. Treat `scoredSoFar` as the
+number to trust and any percentage as a lower bound. The returned `note` repeats
+this to the assistant on every call.
+
+---
 
 ## Limitations
 
 - **Unofficial.** Not affiliated with or endorsed by VIT Bhopal. It reads the same pages your browser does; if VTOP changes them, parts may break until updated.
-- **Read-only.** It only signs in and reads pages. It never registers courses or changes anything on VTOP, and fee and payment pages are never opened.
+- **It can write — one tool can.** `apply_leave` submits a real leave application. Every other tool only reads: it never registers courses, changes marks, or opens fee and payment pages. The write is two-step and cannot fire without an explicit confirm call; see [Hostel leave](#hostel-leave).
+- **Leave duration limits are partly unknown.** VTOP enforces them server-side and publishes none. Only Home Town ≤ 14 days is confirmed, and that one is checked locally. Guessing the rest would block valid requests, so it isn't attempted.
+- **Exam overlap is a warning, not a block.** If a leave conflicts with an exam, `apply_leave` says so prominently but still allows submission — sometimes a clash is unavoidable, and that isn't the tool's decision to make.
 - **OD limit is unconfirmed.** `calculate_od` counts distinct OD days against **8**, based on students' understanding that about 8–9 event ODs are allowed and DSW-approved ODs are unlimited. VTOP doesn't mark which ODs were DSW-approved, so all OD days are counted. Check the official rule with your school or the DSW office, and if you have a source, please open an issue.
 - **Bunk calculator uses 75%,** treating 74.x% as safe, as upstream does. Check your own course rules.
 - **Tested on a B.Tech account (Fall Semester 2026-27).** Other programmes may see different layouts.
+- **The multi-user HTTP connector is included but untested on Bhopal.** Review it before exposing it.
 
 ---
 
 ## Credits and license
 
 - Original project: [VtopMCP](https://github.com/Vikranth-jagdish/VtopMCP) by Vikranth Jagdish (MIT License), itself based on how the [android-vtop-chennai](https://github.com/therealsujitk/android-vtop-chennai) app talks to VTOP.
+- Bhopal adaptations derived via [divyarthjain/vtop-bhopal-mcp](https://github.com/divyarthjain/vtop-bhopal-mcp).
 - This fork is released under the [Apache License 2.0](LICENSE). Code from the original project remains under its MIT terms; see [NOTICE](NOTICE) and [LICENSE-MIT-upstream](LICENSE-MIT-upstream).
