@@ -529,4 +529,44 @@ check("an early return that ends before an exam leaves it clear", () => {
   assert.equal(r.cleared[0].gapMinutes, 75, "12:00 back, 13:15 exam");
 });
 
+// --- issue #9: confirm must reject a bad token before touching VTOP ----------
+//
+// The confirm path previously fetched the leave form, the current semester,
+// the calendar, the timetable and the exam schedule, and minted a token, all
+// BEFORE checking the caller's token. One cheap bogus-token call therefore cost
+// several upstream VTOP requests. The early rejection is verified by source
+// shape here and end-to-end by the http/tool suites; what is assertable
+// offline is that verification is reachable without a client at all.
+
+{
+  const req: LeaveRequest = {
+    leaveCode: "OG1",
+    visitingPlace: "Sehore",
+    leaveFromDate: "2026-10-20",
+    fromTime: "9:00 AM",
+    leaveToDate: "2026-10-20",
+    toTime: "6:00 PM",
+    reason: "Family function.",
+  };
+
+  check("confirm=true with no token is rejected, not silently previewed", () => {
+    assert.equal(verifyPreviewToken(req, "").ok, false);
+    assert.equal(verifyPreviewToken(req, "garbage").ok, false);
+    assert.equal(verifyPreviewToken(req, "a.b.c").ok, false);
+  });
+
+  check("a token minted for one request cannot confirm a different one", () => {
+    const tok = issuePreviewToken(req);
+    assert.equal(verifyPreviewToken(req, tok).ok, true, "same fields verify");
+    // Single-use: the nonce was consumed by the successful verify.
+    assert.equal(verifyPreviewToken(req, tok).ok, false, "replay refused");
+    const other = issuePreviewToken({ ...req, visitingPlace: "Bhopal" });
+    assert.equal(
+      verifyPreviewToken(req, other).ok,
+      false,
+      "a token bound to different fields must not confirm",
+    );
+  });
+}
+
 console.log(`\n${passed} checks passed.`);
