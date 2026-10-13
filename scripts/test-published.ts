@@ -2,7 +2,7 @@
 /**
  * End-to-end test of the PUBLISHED npm package.
  *
- * Spawns `npx -y @vikranth2005/vtop-mcp` (downloading it from the public
+ * Spawns `npx -y vtop-bhopal-mcp` (downloading it from the public
  * registry, exactly like a user's Claude Desktop would) and speaks MCP
  * JSON-RPC over stdio to verify:
  *   1. initialize handshake → serverInfo.name + version
@@ -14,7 +14,7 @@
  */
 import { spawn, ChildProcessWithoutNullStreams } from "node:child_process";
 
-const PKG = process.env.TEST_PKG ?? "@vikranth2005/vtop-mcp";
+const PKG = process.env.TEST_PKG ?? "vtop-bhopal-mcp";
 const REGISTRY = "https://registry.npmjs.org";
 
 const EXPECTED_TOOLS = [
@@ -141,7 +141,7 @@ async function main() {
     if (res.error) throw new Error(res.error.message);
     const info = (res.result as { serverInfo?: { name?: string; version?: string } })
       ?.serverInfo;
-    if (info?.name !== "vtop-mcp")
+    if (info?.name !== "vtop-bhopal-mcp")
       throw new Error(`serverInfo.name='${info?.name}'`);
     results.push({
       step: "initialize",

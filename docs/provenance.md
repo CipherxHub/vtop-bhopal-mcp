@@ -3,10 +3,13 @@
 Where every part of this codebase came from, with sizes measured by diffing
 against both upstream projects rather than estimated.
 
-Short version: roughly **40% is inherited from Vikranth Jagdish's VtopMCP**, about
-**247 lines** come from divyarthjain's Bhopal adaptations, and about **2,127
+Short version: roughly **45% is inherited from Vikranth Jagdish's VtopMCP**, about
+**247 lines** come from divyarthjain's Bhopal adaptations, and about **2,563
 lines** were written for this project — plus all of the live testing that
 produced the Bhopal-specific behaviour encoded in them.
+
+> Every number here is measured against the upstream repos, not estimated. See
+> [Reproducing these numbers](#reproducing-these-numbers) at the end.
 
 ---
 
@@ -25,7 +28,7 @@ divyarthjain              divyarthjain/vtop-bhopal-mcp    Apache-2.0
         ▼
 this project              CipherxHub/vtop-bhopal-mcp      Apache-2.0
   leave tools, pass-eligibility arithmetic, error taxonomy, cache, keepalive,
-  captcha upscaling, structured errors, 135 offline checks
+  captcha upscaling, structured errors, 136 offline checks
   and all testing against the live portal
 ```
 
@@ -38,28 +41,37 @@ this project              CipherxHub/vtop-bhopal-mcp      Apache-2.0
 
 ### Vikranth Jagdish — VtopMCP (MIT)
 
-`src` grew from 4,623 lines in VtopMCP to 7,808 here. Nine files are
+`src` grew from 4,623 lines in VtopMCP to 7,987 here. Seven files are
 **byte-for-byte identical** to his:
 
 | File | Lines | What it is |
 |---|---:|---|
-| `src/http.ts` | 489 | Multi-user HTTP connector |
 | `src/services/attendance-calc.ts` | 265 | Attendance projection formulas |
 | `src/services/session-store.ts` | 168 | Cookie/session handling |
-| `src/services/tls.ts` | 101 | OS trust-store merge |
 | `src/tools/attendance-calc.ts` | 83 | Tool wrapper |
 | `src/services/crypto.ts` | 77 | AES-256-GCM connector tokens |
 | `src/tools/calendar.ts` | 54 | Calendar tool |
 | `src/services/concurrency.ts` | 22 | Request pool |
 | `src/tools/curriculum.ts` | 17 | Curriculum tool |
-| **Total** | **1,276** | |
+| **Total** | **686** | |
 
-`src/web.ts` is 476 of 487 lines identical. Across all of `src`, ~40% of lines
-are byte-identical to VtopMCP.
+Across all of `src`, **3,574 of 7,987 lines (44.7%)** are byte-identical to
+VtopMCP.
 
-This code cannot be claimed as original here. It is his expression — the AES
-token scheme, the trust-store merge and the projection formulas could not be
-reproduced from a specification, which is exactly what makes them copyrightable.
+`src/http.ts` and `src/web.ts` were byte-identical when this fork started and
+are **no longer** — the HTTP connector has been substantially rewritten (auth
+now fails closed, JSON instead of SSE, CORS off by default, loopback bind) and
+the landing page rewritten for multiple clients. They remain *derived from* his
+work and are still covered by the MIT notice, but they are no longer copies.
+
+`src/services/tls.ts` also dropped out of the identical list: only its
+doc-comment changed, to record that VIT Bhopal's certificate chain verifies
+unaided and the bundled intermediate is a no-op there. The executable code is
+unchanged.
+
+This code cannot be claimed as original here. It is his expression — the
+attendance projection formulas and the AES token scheme could not be reproduced
+from a specification, which is exactly what makes them copyrightable.
 
 ### divyarthjain — vtop-bhopal-mcp (Apache-2.0)
 
@@ -86,7 +98,7 @@ the credit is neither inflated nor hidden.
 
 ### This project — original work
 
-Nine files with no upstream counterpart, 2,127 lines:
+Nine files with no upstream counterpart, 2,563 lines:
 
 | File | Lines | What it does |
 |---|---:|---|
@@ -98,16 +110,13 @@ Nine files with no upstream counterpart, 2,127 lines:
 | `src/services/captcha-image.ts` | 112 | 5× captcha upscaling |
 | `src/services/cache.ts` | 80 | Bounded TTL cache |
 | `src/services/keepalive.ts` | 69 | Session keepalive |
-| `src/tools/leave.ts` | 436* | The four leave tools |
-| **Total** | **2,127** | |
+| `src/tools/leave.ts` | 436 | The four leave tools |
+| **Total** | **2,563** | |
 
 Plus substantial edits to inherited files: `vtop-parser.ts` (404 lines changed
-against VtopMCP), `vtop-client.ts`, `schemas/index.ts`, `types/index.ts`, and the
-test suite — 135 offline checks, most of which do not exist upstream.
-
-\* `src/tools/leave.ts` is counted in the tool-layer total above; the services
-figure excludes it. See the diff script below if you want to reproduce these
-numbers.
+against VtopMCP), `vtop-client.ts`, `http.ts` (auth, transport, CORS, bind),
+`web.ts`, `schemas/index.ts`, `types/index.ts` — and the test suite, which grew
+from none to **136 offline checks**.
 
 ---
 

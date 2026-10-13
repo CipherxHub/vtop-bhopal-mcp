@@ -16,7 +16,7 @@ npm run start:http      # listens on 127.0.0.1:3000 by default
 
 Being precise about this, because it determines how much you should trust it.
 
-**Tested offline — 18 checks in `scripts/http-test.ts`:**
+**Tested offline — 19 checks in `scripts/http-test.ts`:**
 
 | | |
 |---|---|

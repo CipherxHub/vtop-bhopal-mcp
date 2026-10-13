@@ -23,7 +23,7 @@ import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { applySystemCATrust } from "../src/services/tls.js";
 
-const BASE = process.env.VTOP_BASE_URL ?? "https://vtopcc.vit.ac.in/vtop";
+const BASE = process.env.VTOP_BASE_URL ?? "https://vtop.vitbhopal.ac.in/vtop";
 const ORIGIN = new URL(BASE).origin;
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
