@@ -107,7 +107,7 @@ Every per-semester tool picks the current semester automatically, so you rarely 
 You need **Node.js 20.6 or newer** (`node -v` to check) and **git**.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/vtop-bhopal-mcp.git
+git clone https://github.com/CipherxHub/vtop-bhopal-mcp.git
 cd vtop-bhopal-mcp
 npm install
 npm run build
@@ -344,7 +344,7 @@ All of this is covered by offline fixtures in `scripts/fixtures.ts` and
 
 **A tool returns `error.code: RECAPTCHA_REQUIRED`.** VTOP served Google reCAPTCHA instead of the readable image captcha, usually because your IP looks like a datacenter or you have attempted several logins recently. Wait a few minutes and retry, or set `VTOP_PROXY_URL` to a residential proxy.
 
-**A tool returns `error.code: ENDPOINT_NOT_FOUND`.** VTOP has no endpoint at that path. **Do not log in again** — the session is fine; the route is wrong or has been renamed. Please [open an issue](https://github.com/YOUR-USERNAME/vtop-bhopal-mcp/issues).
+**A tool returns `error.code: ENDPOINT_NOT_FOUND`.** VTOP has no endpoint at that path. **Do not log in again** — the session is fine; the route is wrong or has been renamed. Please [open an issue](https://github.com/CipherxHub/vtop-bhopal-mcp/issues).
 
 **Login keeps failing with `SESSION_MISMATCH` (HTTP 404).** The captcha belonged to a different VTOP session than the login POST. Fetch a fresh captcha and retry — don't reuse the old one.
 
@@ -354,7 +354,7 @@ All of this is covered by offline fixtures in `scripts/fixtures.ts` and
 
 **`timeout of 30000ms exceeded`.** VTOP is slow (common late at night or on result days). Add `VTOP_TIMEOUT_MS=60000` to your `.env`.
 
-**A tool returns empty data while you can see it on the website.** VTOP's pages change from time to time. Please [open an issue](https://github.com/YOUR-USERNAME/vtop-bhopal-mcp/issues) with the tool name and what you expected. **Don't paste raw pages or screenshots that show personal details.**
+**A tool returns empty data while you can see it on the website.** VTOP's pages change from time to time. Please [open an issue](https://github.com/CipherxHub/vtop-bhopal-mcp/issues) with the tool name and what you expected. **Don't paste raw pages or screenshots that show personal details.**
 
 ---
 

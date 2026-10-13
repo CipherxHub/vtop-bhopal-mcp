@@ -10,12 +10,12 @@
 import type { UserStat } from "./services/session-store.js";
 
 const BRAND = "VTOP Connector";
-const REPO_URL = "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp";
-const AUTHOR_URL = "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp";
-const AUTHOR_URL_TEXT = "github.com/YOUR-USERNAME/vtop-bhopal-mcp";
+const REPO_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp";
+const AUTHOR_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp";
+const AUTHOR_URL_TEXT = "github.com/CipherxHub/vtop-bhopal-mcp";
 const AUTHOR_NAME = "vtop-bhopal-mcp contributors";
 const NPM_PKG = "vtop-bhopal-mcp";
-const NPM_URL = "https://github.com/YOUR-USERNAME/vtop-bhopal-mcp#readme";
+const NPM_URL = "https://github.com/CipherxHub/vtop-bhopal-mcp#readme";
 
 // Deep link straight to ChatGPT's Apps → Developer-mode page. ChatGPT has no
 // install/prefill API and same-origin rules forbid us from touching its tab,
