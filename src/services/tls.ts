@@ -1,14 +1,23 @@
 import tls from "node:tls";
 
 /**
- * VTOP's server (vtopcc.vit.ac.in) presents an INCOMPLETE certificate chain: it
- * sends only the leaf (*.vit.ac.in) and omits the intermediate "Sectigo RSA
- * Domain Validation Secure Server CA". Browsers paper over this by fetching the
- * intermediate via the leaf's AIA URL; Node does not, so it fails with "unable
- * to verify the first certificate". We bundle the (public) intermediate here and
- * supply it to the VTOP HTTPS agent so the chain completes WITHOUT disabling
- * verification — unlike VTOP_INSECURE_TLS, this keeps every other connection
- * (Redis, etc.) fully verified. Source: http://crt.sectigo.com/SectigoRSADomainValidationSecureServerCA.crt
+ * VIT Chennai's VTOP server (vtopcc.vit.ac.in) presents an INCOMPLETE
+ * certificate chain: it sends only the leaf (*.vit.ac.in) and omits the
+ * intermediate "Sectigo RSA Domain Validation Secure Server CA". Browsers paper
+ * over this by fetching the intermediate via the leaf's AIA URL; Node does not,
+ * so it fails with "unable to verify the first certificate".
+ *
+ * NOTE: VIT Bhopal (vtop.vitbhopal.ac.in, CN=*.vitbhopal.ac.in) was checked and
+ * its chain verifies against the OS trust store unaided, so this module is
+ * effectively a no-op there. It is kept because it costs nothing, because
+ * VTOP_BASE_URL can point at another deployment, and because deleting it would
+ * be a behavioural regression the moment someone targets a host with the same
+ * gap.
+ *
+ * The intermediate is bundled here and supplied to the VTOP HTTPS agent so the
+ * chain completes WITHOUT disabling verification — unlike VTOP_INSECURE_TLS,
+ * this keeps every other connection (Redis, etc.) fully verified.
+ * Source: http://crt.sectigo.com/SectigoRSADomainValidationSecureServerCA.crt
  */
 const SECTIGO_RSA_DV_INTERMEDIATE = `-----BEGIN CERTIFICATE-----
 MIIGEzCCA/ugAwIBAgIQfVtRJrR2uhHbdBYLvFMNpzANBgkqhkiG9w0BAQwFADCB

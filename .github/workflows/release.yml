@@ -1,6 +1,7 @@
 name: Release to npm
 
-# Publishes @vikranth2005/vtop-mcp when a tag matching `v*` is pushed.
+# Publishes vtop-bhopal-mcp when a tag matching `v*` is pushed. The name
+# comes from package.json, not from here.
 #
 # WHY CI AND NOT `npm publish` FROM A LAPTOP:
 # Windows cannot write the POSIX executable bit into the npm tarball, so a

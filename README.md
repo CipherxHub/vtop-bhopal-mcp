@@ -200,7 +200,7 @@ Full reference, including arguments and return shapes: **[docs/tools.md](docs/to
 - **Exam overlap is a warning, not a block.** A clash is sometimes unavoidable and isn't this tool's decision to make.
 - **The OD limit is unconfirmed.** `calculate_od` counts against 8, based on students' understanding that ~8–9 event ODs are allowed and DSW-approved ODs are unlimited. VTOP doesn't mark which were DSW-approved. Verify with your school or the DSW office.
 - **Bunk calculator assumes 75%.** Check your own course rules.
-- **The HTTP connector is tested, including a live login.** 18 offline checks cover routing, auth, CORS, the MCP transport and page content; it refuses every unauthenticated request; and a full register → captcha → login → real-data pass was run against VTOP on 13 Oct 2026. What remains untested is the *network path* — whether VTOP serves a Google reCAPTCHA to your host's IP range, which is a property of where you deploy. Recipe and security notes: [docs/http-connector.md](docs/http-connector.md).
+- **The HTTP connector is tested, including a live login.** 19 offline checks cover routing, auth, CORS, the MCP transport and page content; it refuses every unauthenticated request; and a full register → captcha → login → real-data pass was run against VTOP on 13 Oct 2026. What remains untested is the *network path* — whether VTOP serves a Google reCAPTCHA to your host's IP range, which is a property of where you deploy. Recipe and security notes: [docs/http-connector.md](docs/http-connector.md).
 
 ---
 
@@ -210,9 +210,9 @@ Built on earlier work, with each layer credited and sized:
 
 | Layer | Author | Licence | Scale |
 |---|---|---|---|
-| Original architecture and most parsers | [Vikranth Jagdish](https://github.com/Vikranth-jagdish/VtopMCP) | MIT | ~40% inherited |
+| Original architecture and most parsers | [Vikranth Jagdish](https://github.com/Vikranth-jagdish/VtopMCP) | MIT | ~45% inherited |
 | Bhopal parser adaptations | [divyarthjain](https://github.com/divyarthjain/vtop-bhopal-mcp) | Apache-2.0 | ~247 lines, 5 files |
-| Leave, pass rules, errors, cache | this project | Apache-2.0 | ~2,127 new lines |
+| Leave, pass rules, errors, cache | this project | Apache-2.0 | ~2,563 new lines |
 
 Behavioural reference only (no code copied): [android-vtop-chennai](https://github.com/therealsujitk/android-vtop-chennai), GPL-3.0.
 

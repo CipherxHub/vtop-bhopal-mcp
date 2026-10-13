@@ -39,7 +39,7 @@ check("decryptString rejects a tampered token", () => {
 check("exportSession/importSession preserves cookies + identity", () => {
   // Build a session as if we'd logged in: a JSESSIONID cookie + auth identity.
   const jar = new CookieJar();
-  jar.setCookieSync("JSESSIONID=abc123; Path=/", "https://vtopcc.vit.ac.in/vtop");
+  jar.setCookieSync("JSESSIONID=abc123; Path=/", "https://vtop.vitbhopal.ac.in/vtop");
   const session = {
     cookies: jar.serializeSync(),
     authorizedID: "21BCE1234",
