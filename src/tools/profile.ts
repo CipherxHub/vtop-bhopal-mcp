@@ -14,7 +14,10 @@ export function registerProfileTool(server: McpServer, client: VtopClient) {
       const profile = parseProfile(await client.getProfileHtml());
       try {
         const pb = parseProgrammeBranch(await client.getGradeHistoryHtml());
-        if (pb) Object.assign(profile, pb);
+        // Assign field-by-field: an empty branch (e.g. a header reading just
+        // "B.Tech") must not wipe a good profile-page value.
+        if (pb?.program) profile.program = pb.program;
+        if (pb?.branch) profile.branch = pb.branch;
       } catch {
         /* keep the profile-page values; grade history is a bonus */
       }

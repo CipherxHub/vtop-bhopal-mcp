@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "../services/vtop-client.js";
+import { VtopError } from "../services/errors.js";
 import {
   computePendingSubjects,
   parseCurriculumBaskets,
@@ -18,13 +19,22 @@ export function registerFeesTools(server: McpServer, client: VtopClient) {
     FeeReceiptsSchema.shape,
     async ({ receiptNo }) => {
       if (receiptNo) {
-        const ref = /^\d+\/\d+\/[A-Z]+$/.test(receiptNo.trim())
-          ? receiptNo.trim()
-          : `${receiptNo.trim()}/8/BPL`;
-        return parseFeeReceiptDetail(
+        const detail = parseFeeReceiptDetail(
           receiptNo.trim(),
-          await client.getFeeReceiptDetailHtml(ref),
+          await client.getFeeReceiptDetailHtml(receiptNo.trim()),
         );
+        // A detail miss parses to a text-only dump. That is a rejection,
+        // not a receipt — fail loud instead of returning page text as data.
+        const fields = detail.fields;
+        const onlyText = Object.keys(fields).length === 1 && "text" in fields;
+        if (onlyText || /unable to process|not available|invalid|no record/i.test(fields.text ?? "")) {
+          throw new VtopError(
+            "UPSTREAM",
+            `VTOP did not return a receipt breakdown for "${receiptNo.trim()}".`,
+            fields.text?.slice(0, 200) ?? "Empty detail response.",
+          );
+        }
+        return detail;
       }
       const receipts = parseFeeReceipts(await client.getFeeReceiptsHtml());
       const total = receipts.reduce((s, r) => s + r.amount, 0);

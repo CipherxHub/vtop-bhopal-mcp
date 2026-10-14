@@ -526,6 +526,11 @@ export interface AttendanceDetailCounts {
   absent: number;
   onDuty: number;
   total: number;
+  /**
+   * Rows with a non-empty but unrecognised status (Holiday, Cancelled…).
+   * Counted separately so present+absent+onDuty+other always equals total.
+   */
+  other: number;
   /** OD time in class-hours (duration-based: a 2-period lab counts as 2). */
   odHours: number;
   /** Date cell of each OD class, as VTOP shows it (e.g. "25-09-2026"). */
@@ -563,7 +568,15 @@ function periodsFromTiming(timing: string): number {
   return dur <= 0 ? 1 : Math.max(1, Math.round(dur / 50));
 }
 
-/** Parse a per-class attendance detail (processViewAttendanceDetail) and tally statuses. */
+/**
+ * Parse a per-class attendance detail (processViewAttendanceDetail) and tally
+ * statuses.
+ *
+ * @deprecated DEAD PATH: no tool or VtopClient method posts to
+ * ENDPOINTS.attendanceDetail, so the Bhopal-vs-Chennai request shape is
+ * unverified and these tallies never reach a user. Kept (and tested) for the
+ * day a caller is wired; do not treat as covered surface until then.
+ */
 export function parseAttendanceDetail(html: string): AttendanceDetailCounts {
   const $ = cheerio.load(html);
   // The per-class table: the longest one whose header row has date + status
@@ -586,7 +599,7 @@ export function parseAttendanceDetail(html: string): AttendanceDetailCounts {
   const timingIdx = headers.findIndex((h) => h.includes("timing") || (h.includes("day") && h.includes("time")));
   const dateIdx = headers.findIndex((h) => h.includes("date"));
 
-  const counts: AttendanceDetailCounts = { present: 0, absent: 0, onDuty: 0, total: 0, odHours: 0, odDates: [] };
+  const counts: AttendanceDetailCounts = { present: 0, absent: 0, onDuty: 0, total: 0, other: 0, odHours: 0, odDates: [] };
   rows.slice(1).each((_i, r) => {
     const cells = $(r).find("td").map((_j, e) => $(e).text().replace(/\s+/g, " ").trim()).get();
     if (cells.length === 0) return;
@@ -599,6 +612,7 @@ export function parseAttendanceDetail(html: string): AttendanceDetailCounts {
       if (dateIdx >= 0 && cells[dateIdx]) counts.odDates.push(cells[dateIdx]);
     } else if (/present/.test(status)) counts.present++;
     else if (/absent/.test(status)) counts.absent++;
+    else counts.other++;
   });
   return counts;
 }
@@ -1003,6 +1017,14 @@ export function parseExamSchedule(html: string): ExamSchedule[] {
 
 // "P" = pass in a non-credit course (Bhopal); recognised as a grade, kept out of GPA.
 const GRADE_SET = new Set<string>([...GRADE_LETTERS, "P"]);
+
+/**
+ * Grades that count as a completed AND earned course. Shared by grade-history
+ * earned-credit totals and pending-subject detection so the two can never
+ * disagree on the same row (a blank/unknown grade earns nothing and stays
+ * pending). F failed, N never graded.
+ */
+const PASSING_GRADES = new Set(["S", "A", "B", "C", "D", "E", "P"]);
 /** "Nov 2025", "November-2025", "Nov'2025" — an exam-month token. A real month
  * name is required: a bare letters+digits pattern also matched course codes
  * (ENG1004), so every course became its own "semester". */
@@ -1103,8 +1125,11 @@ export function parseGradeHistory(html: string): GradeHistory {
   const monthTime = (m: string) => Date.parse(`1 ${m.replace(/[-.,']/g, " ")}`) || 0;
   const byDate = [...grouped].sort(([a], [b]) => monthTime(a) - monthTime(b));
   for (const [examMonth, grades] of byDate) {
+    // Earned shares pending's definition of "completed": only the passing
+    // set banks credit, so a blank/unknown grade can never be both earned
+    // here and pending there.
     const earnedCredits = grades.reduce(
-      (s, g) => s + (g.grade === "F" || g.grade === "N" ? 0 : g.credits),
+      (s, g) => s + (PASSING_GRADES.has(g.grade) ? g.credits : 0),
       0
     );
     const graded = grades.filter((g) => g.grade && g.grade !== "P");
@@ -1565,9 +1590,6 @@ export function parseCurriculumBaskets(html: string): CurriculumBasket[] {
 
   return baskets;
 }
-
-/** Grades that count as a completed course. F failed, N never graded. */
-const PASSING_GRADES = new Set(["S", "A", "B", "C", "D", "E", "P"]);
 
 /**
  * Pending subjects = curriculum baskets minus grade-history passes.

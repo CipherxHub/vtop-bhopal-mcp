@@ -1026,13 +1026,28 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
   /**
    * One receipt's detail HTML (as rendered into the page's receipt panel).
    *
-   * Needs the receipt ref exactly as printed on the list's VIEW button
-   * (`<number>/8/BPL`) plus the applno/registerNumber hidden fields from the
-   * list page — fetched here so callers pass only the ref.
+   * Accepts a bare number ("22222") or the full ref as printed on the list's
+   * VIEW button ("22222/8/BPL"). A bare number is resolved against the list's
+   * onclick refs — never synthesised — so a campus/segment change surfaces as
+   * UPSTREAM instead of a silent detail miss.
    */
   async getFeeReceiptDetailHtml(receitNo: string): Promise<string> {
     this.ensureAuthenticated();
     const listHtml = await this.getFeeReceiptsHtml();
+    let ref = receitNo.trim();
+    if (!ref.includes("/")) {
+      const m = listHtml.match(
+        new RegExp(`doDuplicateReceipt\\(['"](${ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/[^'"]+)['"]\\)`)
+      );
+      if (!m) {
+        throw new VtopError(
+          "UPSTREAM",
+          `No receipt ref on file for number "${ref}".`,
+          "The receipt list carries no VIEW button for it — it may not exist, or the list layout changed.",
+        );
+      }
+      ref = m[1];
+    }
     const hidden = (name: string): string => {
       const m = listHtml.match(
         new RegExp(`<input[^>]+name="${name}"[^>]+value="([^"]*)"`, "i"),
@@ -1042,7 +1057,7 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
       return m ? m[1] : "";
     };
     return this.postWithAuth(ENDPOINTS.feeReceiptDetail, {
-      receitNo,
+      receitNo: ref,
       applno: hidden("applno"),
       registerNumber: hidden("regno") || hidden("registerNumber") || this.registrationNumber || "",
       authorizedID: this.authorizedID!,
