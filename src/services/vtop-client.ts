@@ -991,31 +991,36 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
    * verifyMenu/authorizedID/_csrf POST: acknowledgments, proctor details,
    * curriculum baskets, fee receipts, leave history.
    */
-  private async getInfoPage(endpoint: string): Promise<string> {
-    return this.fetchPage(endpoint, {
+  private async getInfoPage(endpoint: string, what?: string): Promise<string> {
+    const html = await this.fetchPage(endpoint, {
       verifyMenu: "true",
       nocache: String(Date.now()),
     });
+    // VTOP answers a disabled/unreachable module with HTTP 200 carrying an
+    // error modal. That must raise ENDPOINT_NOT_FOUND here — never flow into
+    // a parser as "no records".
+    this.assertLeaveReachable(html, what ?? endpoint);
+    return html;
   }
 
   /** Admission document checklist (Submitted / Not Applicable / Not Submitted). */
   async getAcknowledgmentsHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.acknowledgments);
+    return this.getInfoPage(ENDPOINTS.acknowledgments, "acknowledgments");
   }
 
   /** Standalone proctor view. Same data as the profile's proctor section. */
   async getProctorDetailsHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.proctorDetails);
+    return this.getInfoPage(ENDPOINTS.proctorDetails, "proctor details");
   }
 
   /** Programme curriculum baskets (per-category course tables). */
   async getCurriculumBasketsHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.curriculumBaskets);
+    return this.getInfoPage(ENDPOINTS.curriculumBaskets, "curriculum baskets");
   }
 
   /** Fee receipt list (number/date/amount/campus). */
   async getFeeReceiptsHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.feeReceipts);
+    return this.getInfoPage(ENDPOINTS.feeReceipts, "fee receipts");
   }
 
   /**
@@ -1047,12 +1052,7 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
 
   /** Full leave history (status + approved past records + gate-pass state). */
   async getLeaveHistoryHtml(): Promise<string> {
-    // Same reachability rule as the form/status getters: VTOP answers a
-    // disabled module with HTTP 200 carrying an error modal, which must
-    // raise ENDPOINT_NOT_FOUND — never parse as "no history".
-    const html = await this.getInfoPage(ENDPOINTS.leaveHistory);
-    this.assertLeaveReachable(html, "leave history");
-    return html;
+    return this.getInfoPage(ENDPOINTS.leaveHistory, "leave history");
   }
 
   /**

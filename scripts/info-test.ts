@@ -198,6 +198,34 @@ async function main() {
     assert.equal(r.records[1].gatePassIn, false);
   });
 
+  await check("disabled modules raise ENDPOINT_NOT_FOUND instead of empty", async () => {
+    // VTOP answers dead routes with HTTP 200 + error modal. Every info-page
+    // getter must raise rather than parse that as "no records".
+    const { VtopClient: RealClient } = await import("../src/services/vtop-client.js");
+    const { VtopError } = await import("../src/services/errors.js");
+    class DeadModule extends RealClient {
+      override async fetchPage(): Promise<string> {
+        return "<div>This menu is not available at present!!!</div>";
+      }
+    }
+    const stub = new DeadModule("https://example.invalid/vtop");
+    for (const call of [
+      () => stub.getAcknowledgmentsHtml(),
+      () => stub.getProctorDetailsHtml(),
+      () => stub.getCurriculumBasketsHtml(),
+      () => stub.getFeeReceiptsHtml(),
+      () => stub.getLeaveHistoryHtml(),
+    ]) {
+      try {
+        await call();
+        assert.fail("expected ENDPOINT_NOT_FOUND");
+      } catch (err) {
+        assert.ok(err instanceof VtopError, "must be a coded error");
+        assert.equal(err.code, "ENDPOINT_NOT_FOUND");
+      }
+    }
+  });
+
   // get_calendar classGroup ---------------------------------------------------------
   await check("get_calendar defaults the class group to COMB", async () => {
     lastCalendarGroup = null;
