@@ -241,13 +241,24 @@ app.use(express.urlencoded({ extended: false }));
 
 // Minimal request log: method + path + status + duration. No headers,
 // tokens, cookies, or query strings are logged.
+function logPath(req: Request): string {
+  // Bearer secrets travel in URL paths here (/mcp/<token>, /stats/<token>,
+  // /keepalive/<token>, /debug/vtop/<token>). Logging req.path verbatim
+  // would write them to stdout on every request, so redact to the route.
+  const p = req.path;
+  for (const prefix of [MCP_PATH, "/stats", "/keepalive", "/debug/vtop"]) {
+    if (p === prefix) return p;
+    if (p.startsWith(`${prefix}/`)) return `${prefix}/[redacted]`;
+  }
+  return p;
+}
 app.use((req, res, next) => {
   const started = Date.now();
   console.error(
     JSON.stringify({
       event: "http_request_start",
       method: req.method,
-      path: req.path,
+      path: logPath(req),
       time: new Date().toISOString(),
     }),
   );
@@ -256,7 +267,7 @@ app.use((req, res, next) => {
       JSON.stringify({
         event: "http_request_finish",
         method: req.method,
-        path: req.path,
+        path: logPath(req),
         status: res.statusCode,
         durationMs: Date.now() - started,
       }),

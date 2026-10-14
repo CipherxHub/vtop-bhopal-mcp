@@ -491,6 +491,8 @@ try {
     const logs = multi.logs();
     assert.doesNotMatch(logs, new RegExp(token), "token leaked into stdout/stderr");
     assert.doesNotMatch(logs, /\/mcp\/[A-Za-z0-9_-]{40,}/, "a full connector path leaked into logs");
+    // The route must still be visible for operators: redacted, not dropped.
+    assert.match(logs, /\/mcp\/\[redacted\]/, "token-in-URL requests log a redacted route");
   });
 
   console.log(`\n${passed} checks passed.`);
