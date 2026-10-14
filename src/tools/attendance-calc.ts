@@ -9,7 +9,7 @@ import {
   listUpcomingClassDays,
   countUpcoming,
 } from "../services/attendance-calc.js";
-import { ENDPOINTS } from "../services/constants.js";
+import { assertIsoDate } from "../services/dates.js";
 import { CalcAttendanceSchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
 
@@ -27,8 +27,12 @@ export function registerAttendanceCalcTool(server: McpServer, client: VtopClient
       "If the response contains NOT_AUTHENTICATED, call get_captcha then login then retry. login auto-uses VTOP_USERNAME/VTOP_PASSWORD env vars if set; if it reports credentials missing, ask the user for them. Requires login.",
     CalcAttendanceSchema.shape,
     async ({ semesterId, courseCode, targetPercent, untilDate, includeUntilDate, bunkDates }) => {
+      // Malformed dates corrupt the month slicing and read as "no classes".
+      // A past untilDate is legitimate (closed window: zero sessions left).
+      assertIsoDate(untilDate, "untilDate");
+      for (const d of bunkDates ?? []) assertIsoDate(d, "bunkDates entry");
       const id = semesterId ?? (await client.getCurrentSemesterId());
-      const attHtml = await client.fetchPage(ENDPOINTS.attendance, { semesterSubId: id });
+      const attHtml = await client.getAttendanceHtml(id);
       let records = parseAttendance(attHtml);
 
       const wanted = courseCode?.trim().toLowerCase();
@@ -64,9 +68,13 @@ export function registerAttendanceCalcTool(server: McpServer, client: VtopClient
 
       for (const c of courses) {
         const u = counts[c.courseCode] ?? 0;
-        c.deadline = projectDeadline(c.attended, c.total, u, untilDate, threshold);
-        if (bunkSet.size > 0) {
-          c.plannedBunk = planBunk(c.attended, c.total, u, bunkedCounts[c.courseCode] ?? 0, threshold);
+        // Date-aware math needs real counts; unknown figures stay without a
+        // deadline projection rather than projecting from fabricated zeros.
+        if (c.attended !== null && c.total !== null) {
+          c.deadline = projectDeadline(c.attended, c.total, u, untilDate, threshold);
+          if (bunkSet.size > 0) {
+            c.plannedBunk = planBunk(c.attended, c.total, u, bunkedCounts[c.courseCode] ?? 0, threshold);
+          }
         }
       }
 

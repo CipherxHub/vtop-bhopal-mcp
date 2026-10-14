@@ -102,9 +102,10 @@ export interface AttendanceProjection {
   courseName: string;
   courseType: string;
   slot: string;
-  attended: number;
-  total: number;
-  currentPercent: number;
+  attended: number | null;
+  total: number | null;
+  /** null when VTOP printed no usable figures — unknown, never 0. */
+  currentPercent: number | null;
   thresholdPercent: number;
   isSafe: boolean;
   /** Future classes skippable while staying safe (0 if already below). */
@@ -202,6 +203,19 @@ export function projectCourse(
       bunkBuffer: 0,
       classesToRecover: null,
       advice: "No classes conducted yet — nothing to calculate.",
+    };
+  }
+  // VTOP printed no usable figures for this course (dashes/blanks). Report
+  // unknown — never project from a fabricated 0, which would read as
+  // debarred-with-no-attendance rather than missing data.
+  if (rec.total === null || rec.attended === null) {
+    return {
+      ...base,
+      currentPercent: null,
+      isSafe: false,
+      bunkBuffer: 0,
+      classesToRecover: null,
+      advice: "VTOP shows no attendance figures for this course yet — nothing to calculate.",
     };
   }
   const safe = isSafe(rec.attended, rec.total, targetPercent);

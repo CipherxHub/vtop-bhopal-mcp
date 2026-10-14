@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "../services/vtop-client.js";
 import { weekdayOf, type CalendarDay } from "../services/attendance-calc.js";
+import { assertIsoMonth } from "../services/dates.js";
 import { CalendarSchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
 
@@ -13,9 +14,12 @@ export function registerCalendarTool(server: McpServer, client: VtopClient) {
     async ({ semesterId, month, query, holidaysOnly, classGroup }) => {
       const id = semesterId ?? (await client.getCurrentSemesterId());
       const group = classGroup?.trim() || "COMB";
+      // A malformed month used to be silently ignored (returning notable-days
+      // instead of the requested month). Fail loud: "2026-13" is never data.
+      assertIsoMonth(month, "month");
       let from = "1900-01-01";
       let to = "2999-12-31";
-      if (month && /^\d{4}-\d{2}$/.test(month)) {
+      if (month) {
         from = `${month}-01`;
         to = `${month}-31`;
       }

@@ -10,7 +10,9 @@ deliberately hard to trigger by accident.
 
 ### Call 1 — preview
 
-Pass the details with `confirm` unset. **Nothing is sent to VTOP.** You get
+Pass the details with `confirm` unset. **Nothing is submitted to VTOP**
+(preview performs reads only — the form, timetable, calendar and exams — so
+the overlap figures are real data). You get
 back:
 
 - the **normalised** values, so what you read is exactly what would be submitted
@@ -29,8 +31,10 @@ back:
 
 Repeat the **identical** fields, plus `confirm: true` and the `previewToken`.
 
-The token is an HMAC over a fingerprint of every field, with a nonce, a
-10-minute expiry, and single-use tracking. Change anything between the
+The token is an HMAC over a SHA-256 digest of every field, with a nonce, a
+10-minute expiry, and single-use tracking. It is also bound to the
+authenticated caller, so a token minted for one user cannot be confirmed by
+another. Change anything between the
 two calls — a different time, a typo fix, an added reason — and the token no
 longer matches. Reusing or forging a token is also refused. The submission is
 **refused** and you must preview again.
@@ -127,8 +131,8 @@ means *unknown*, not *unlimited*.
 
 - leave id and type
 - dates, times and duration
-- approval status — `REQUEST RAISED`, `PROCTOR APPROVAL PENDING`, `APPROVED`,
-  `REJECTED`, or whatever VTOP currently uses
+- approval status, reported verbatim — e.g. `REQUEST RAISED`,
+  `PROCTOR APPROVAL PENDING`, `REQUEST APPROVED`, `REJECTED`
 - approver remarks, including the staff id when VTOP prints one
 - gate-pass OUT/IN flags
 

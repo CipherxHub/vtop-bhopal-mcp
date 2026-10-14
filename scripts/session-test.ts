@@ -76,10 +76,10 @@ check("getSessionStore() is null without REDIS_URL", () => {
 // --- stats dashboard rendering ---
 check("statsPage renders count, reg number, logins + reuses (noindex)", () => {
   const html = statsPage([
-    { regNo: "23BCE1851", firstSeen: "2026-05-24T10:00:00Z", lastSeen: "2026-05-24T14:00:00Z", logins: 7, reuses: 12 },
+    { regNo: "21BCE1234", firstSeen: "2026-05-24T10:00:00Z", lastSeen: "2026-05-24T14:00:00Z", logins: 7, reuses: 12 },
   ]);
   assert.match(html, /class="big">1</); // 1 unique user
-  assert.match(html, /23BCE1851/);
+  assert.match(html, /21BCE1234/);
   assert.match(html, /class="n">7</); // login count
   assert.match(html, /class="n">12</); // reuse count
   assert.match(html, /session reuses/); // summary line

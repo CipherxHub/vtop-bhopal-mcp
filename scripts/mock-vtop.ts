@@ -26,7 +26,7 @@ import type { AddressInfo } from "node:net";
 const PNG_1x1 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-export const TEST_REGNO = "22BCE1234";
+export const TEST_REGNO = "21BCE1234";
 export const TEST_USER = "22bce1234";
 export const TEST_PASS = "s3cret-password";
 /** The captcha text the mock expects on a successful login. */
@@ -43,7 +43,11 @@ export type MockMode =
   | "invalidCaptcha"
   /** Username/password rejected. */
   | "invalidCreds"
+  /** Username/password rejected with the no-slash wording. */
+  | "invalidCredsOr"
   | "locked"
+  /** Account locked with the short wording (no "is"). */
+  | "lockedShort"
   | "maxAttempts"
   /** Login returns 200 but no authorizedIDX and no recognised error. */
   | "unrecognized";
@@ -226,9 +230,24 @@ export class MockVtop {
         );
         return;
       }
+      if (this.mode === "invalidCredsOr") {
+        session.authenticated = false;
+        this.send(
+          res,
+          this.page("Login", `<div class="err">Invalid Username or Password</div>`),
+          200,
+          setCookie,
+        );
+        return;
+      }
       if (this.mode === "locked") {
         session.authenticated = false;
         this.send(res, this.page("Login", `<div class="err">Account is Locked</div>`), 200, setCookie);
+        return;
+      }
+      if (this.mode === "lockedShort") {
+        session.authenticated = false;
+        this.send(res, this.page("Login", `<div class="err">Account Locked</div>`), 200, setCookie);
         return;
       }
       if (this.mode === "maxAttempts") {

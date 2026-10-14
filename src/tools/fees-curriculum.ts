@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "../services/vtop-client.js";
+import { VtopError } from "../services/errors.js";
 import {
   computePendingSubjects,
   parseCurriculumBaskets,
@@ -18,13 +19,22 @@ export function registerFeesTools(server: McpServer, client: VtopClient) {
     FeeReceiptsSchema.shape,
     async ({ receiptNo }) => {
       if (receiptNo) {
-        const ref = /^\d+\/\d+\/[A-Z]+$/.test(receiptNo.trim())
-          ? receiptNo.trim()
-          : `${receiptNo.trim()}/8/BPL`;
-        return parseFeeReceiptDetail(
+        const detail = parseFeeReceiptDetail(
           receiptNo.trim(),
-          await client.getFeeReceiptDetailHtml(ref),
+          await client.getFeeReceiptDetailHtml(receiptNo.trim()),
         );
+        // A detail miss parses to a text-only dump. That is a rejection,
+        // not a receipt — fail loud instead of returning page text as data.
+        const fields = detail.fields;
+        const onlyText = Object.keys(fields).length === 1 && "text" in fields;
+        if (onlyText || /unable to process|not available|invalid|no record/i.test(fields.text ?? "")) {
+          throw new VtopError(
+            "UPSTREAM",
+            `VTOP did not return a receipt breakdown for "${receiptNo.trim()}".`,
+            fields.text?.slice(0, 200) ?? "Empty detail response.",
+          );
+        }
+        return detail;
       }
       const receipts = parseFeeReceipts(await client.getFeeReceiptsHtml());
       const total = receipts.reduce((s, r) => s + r.amount, 0);
@@ -46,6 +56,15 @@ export function registerCurriculumBasketTools(server: McpServer, client: VtopCli
     EmptySchema.shape,
     async () => {
       const baskets = parseCurriculumBaskets(await client.getCurriculumBasketsHtml());
+      // Every student has a curriculum: zero parsed baskets means the layout
+      // changed, not an empty degree. Fail loud, never categories:0 success.
+      if (baskets.length === 0) {
+        throw new VtopError(
+          "UPSTREAM",
+          "VTOP returned a curriculum page with no recognisable course tables.",
+          "The layout may have changed. Not treated as an empty curriculum.",
+        );
+      }
       return {
         categories: baskets.length,
         courseCount: baskets.reduce((s, b) => s + b.courses.length, 0),
@@ -66,6 +85,13 @@ export function registerCurriculumBasketTools(server: McpServer, client: VtopCli
       ]);
       const baskets = parseCurriculumBaskets(basketsHtml);
       const history = parseGradeHistory(gradesHtml);
+      if (baskets.length === 0) {
+        throw new VtopError(
+          "UPSTREAM",
+          "VTOP returned a curriculum page with no recognisable course tables.",
+          "The layout may have changed. Not treated as all-complete.",
+        );
+      }
       const { pending, completedCount, discrepancies } = computePendingSubjects(baskets, history);
       const pendingCredits = pending.reduce((s, c) => s + c.credits, 0);
       return {

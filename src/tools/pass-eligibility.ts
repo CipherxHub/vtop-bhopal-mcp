@@ -148,8 +148,11 @@ export function registerPassEligibilityTool(server: McpServer, client: VtopClien
         const fatComp = rec.marks.find((m) => /term\s*end|\bfat\b/i.test(m.component));
 
         // A single "Mid Term" row (older layout) stands in for both CATs.
-        const cat1Raw = cat1 ? cat1.scored : midTerm ? midTerm.scored : null;
-        const cat2Raw = cat2 ? cat2.scored : midTerm ? midTerm.scored : null;
+        // Unpublished (blank) scores flow through as null: deficit math
+        // treats them as 0 exactly as before, and a blank CAT reads as
+        // missed — consistent with a CAT row VTOP omits entirely.
+        const cat1Raw = cat1?.scored ?? midTerm?.scored ?? null;
+        const cat2Raw = cat2?.scored ?? midTerm?.scored ?? null;
 
         const hasCats = !!cat1 || !!cat2 || !!midTerm;
         const cats: CatAssessment[] = hasCats
@@ -159,11 +162,15 @@ export function registerPassEligibilityTool(server: McpServer, client: VtopClien
             ]
           : [];
 
-        const fatRaw = fatComp ? fatComp.scored : null;
+        const fatRaw = fatComp?.scored ?? null;
+        // A present-but-blank FAT is unpublished, not failed: null keeps
+        // canPass pending instead of reporting a taken-and-failed TEE.
         // Sum of EVERY component VTOP has published a mark for, on the 100-point
         // scale. This already includes the CATs once they are scored, so it must
-        // NOT be added to the CAT contribution again.
-        const scoredSoFar = round2(rec.marks.reduce((s, m) => s + m.weightage, 0));
+        // NOT be added to the CAT contribution again. Unpublished (null)
+        // weightages bank nothing — same total as before, without pretending
+        // a blank row scored zero.
+        const scoredSoFar = round2(rec.marks.reduce((s, m) => s + (m.weightage ?? 0), 0));
 
         const verdict = hasCats
           ? assessCourse(cats, fatRaw, {
@@ -184,7 +191,7 @@ export function registerPassEligibilityTool(server: McpServer, client: VtopClien
         const upcoming = upcomingKnown
           ? sessionsBefore(myDays, calendar, today, fatDate)
           : null;
-        const runway = att
+        const runway = att && att.attended !== null && att.total !== null
           ? {
               ...attendanceRunway(
                 { attended: att.attended, total: att.total },

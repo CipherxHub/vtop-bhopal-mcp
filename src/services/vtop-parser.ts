@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import type { Weekday, WeeklySchedule, CalendarDay } from "./attendance-calc.js";
+import { VtopError } from "./errors.js";
 import type {
   AttendanceRecord,
   TimetableSlot,
@@ -22,6 +23,23 @@ import type {
   FeeReceipt,
 } from "../types/index.js";
 import { GRADE_LETTERS, GRADE_POINTS } from "./constants.js";
+
+/**
+ * VTOP's recognised "genuinely empty" phrasings. When the expected container
+ * is absent AND none of these appear, the page is a changed layout or an
+ * error shell — which must throw UPSTREAM, never degrade to "nothing
+ * published yet" with ok:true.
+ */
+const RECOGNISED_EMPTY = /no\s*(records?|data)\s*(found|to\s*(show|display))?/i;
+
+function assertPageShape(found: boolean, what: string, html: string): void {
+  if (found || RECOGNISED_EMPTY.test(html)) return;
+  throw new VtopError(
+    "UPSTREAM",
+    `VTOP returned a ${what} page without the expected table.`,
+    "The portal layout may have changed, or this is an error page. Not treated as empty data.",
+  );
+}
 
 /**
  * Compute creditsRemaining (clamped ≥ 0) and percentComplete (rounded to
@@ -134,7 +152,7 @@ export function parseAttendance(html: string): AttendanceRecord[] {
   // when there were no <th>s (colCount 0).
   const root = $("#getStudentDetails").first();
   const table = root.is("table") ? root : root.find("table").first();
-  if (!table.length) return records;
+  assertPageShape(table.length > 0, "attendance", html);
 
   const rows = table.find("tr").toArray();
   if (!rows.length) return records;
@@ -181,14 +199,22 @@ export function parseAttendance(html: string): AttendanceRecord[] {
     }
     if (!slot && !courseCode) continue;
 
+    // A missing/non-numeric cell ("-", blank) is unknown, never 0. A real 0
+    // means classes happened and none were attended; null means the figures
+    // are not on the page, and every consumer must say so.
+    const num = (s: string): number | null => {
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : null;
+    };
+
     records.push({
       courseCode,
       courseName,
       courseType,
       slot,
-      attended: parseInt(cell(attendedIdx), 10) || 0,
-      total: parseInt(cell(totalIdx), 10) || 0,
-      percentage: parseFloat(cell(percentageIdx)) || 0,
+      attended: num(cell(attendedIdx)),
+      total: num(cell(totalIdx)),
+      percentage: num(cell(percentageIdx)),
     });
   }
 
@@ -224,10 +250,8 @@ export function parseCourses(
   }[] = [];
 
   const container = $("#studentDetailsList");
-  if (!container.length) return courses;
-
   const table = container.find("table").first();
-  if (!table.length) return courses;
+  assertPageShape(table.length > 0, "timetable course list", html);
 
   const headings: string[] = [];
   table.find("th").each((_i, el) => {
@@ -365,7 +389,10 @@ export function parseTimetableGrid(html: string): GridSession[] {
       .toArray()
       .some((r) => GRID_WEEKDAYS[$(r).find("td, th").first().text().trim().toUpperCase()] !== undefined),
   );
-  if (!gridEl) return [];
+  if (!gridEl) {
+    assertPageShape(false, "timetable grid", html);
+    return [];
+  }
   const grid = $(gridEl);
   const tbodyRows = grid.find("> tbody > tr");
   const rows = (tbodyRows.length ? tbodyRows : grid.find("tr")).toArray();
@@ -499,6 +526,11 @@ export interface AttendanceDetailCounts {
   absent: number;
   onDuty: number;
   total: number;
+  /**
+   * Rows with a non-empty but unrecognised status (Holiday, Cancelled…).
+   * Counted separately so present+absent+onDuty+other always equals total.
+   */
+  other: number;
   /** OD time in class-hours (duration-based: a 2-period lab counts as 2). */
   odHours: number;
   /** Date cell of each OD class, as VTOP shows it (e.g. "25-09-2026"). */
@@ -536,7 +568,15 @@ function periodsFromTiming(timing: string): number {
   return dur <= 0 ? 1 : Math.max(1, Math.round(dur / 50));
 }
 
-/** Parse a per-class attendance detail (processViewAttendanceDetail) and tally statuses. */
+/**
+ * Parse a per-class attendance detail (processViewAttendanceDetail) and tally
+ * statuses.
+ *
+ * @deprecated DEAD PATH: no tool or VtopClient method posts to
+ * ENDPOINTS.attendanceDetail, so the Bhopal-vs-Chennai request shape is
+ * unverified and these tallies never reach a user. Kept (and tested) for the
+ * day a caller is wired; do not treat as covered surface until then.
+ */
 export function parseAttendanceDetail(html: string): AttendanceDetailCounts {
   const $ = cheerio.load(html);
   // The per-class table: the longest one whose header row has date + status
@@ -559,7 +599,7 @@ export function parseAttendanceDetail(html: string): AttendanceDetailCounts {
   const timingIdx = headers.findIndex((h) => h.includes("timing") || (h.includes("day") && h.includes("time")));
   const dateIdx = headers.findIndex((h) => h.includes("date"));
 
-  const counts: AttendanceDetailCounts = { present: 0, absent: 0, onDuty: 0, total: 0, odHours: 0, odDates: [] };
+  const counts: AttendanceDetailCounts = { present: 0, absent: 0, onDuty: 0, total: 0, other: 0, odHours: 0, odDates: [] };
   rows.slice(1).each((_i, r) => {
     const cells = $(r).find("td").map((_j, e) => $(e).text().replace(/\s+/g, " ").trim()).get();
     if (cells.length === 0) return;
@@ -572,6 +612,7 @@ export function parseAttendanceDetail(html: string): AttendanceDetailCounts {
       if (dateIdx >= 0 && cells[dateIdx]) counts.odDates.push(cells[dateIdx]);
     } else if (/present/.test(status)) counts.present++;
     else if (/absent/.test(status)) counts.absent++;
+    else counts.other++;
   });
   return counts;
 }
@@ -613,13 +654,21 @@ export function parseAcademicCalendar(html: string, calDate: string): CalendarDa
   const [, mon, yr] = calDate.split("-");
   const monthNum = MONTH_NUM[(mon ?? "").toUpperCase()];
   const year = parseInt(yr ?? "", 10);
-  if (!monthNum || !Number.isFinite(year)) return [];
+  // A bad token is a caller bug, not an empty month — fail loud so a
+  // corrupted calendar can never read as "no instructional days".
+  if (!monthNum || !Number.isFinite(year)) {
+    throw new VtopError(
+      "UPSTREAM",
+      `Cannot parse the calendar month token "${calDate}".`,
+      "Expected DD-MMM-YYYY (e.g. 01-DEC-2025) from the month list.",
+    );
+  }
 
   const $ = cheerio.load(html);
   const table = $("table.calendar-table").first().length
     ? $("table.calendar-table").first()
     : $("#list-wrapper table").first();
-  if (!table.length) return [];
+  assertPageShape(table.length > 0, "academic calendar month", html);
 
   const days: CalendarDay[] = [];
   table.find("td").each((_i, td) => {
@@ -737,12 +786,18 @@ export function parseMarks(html: string): MarksRecord[] {
         const c = (idx: number) => (idx >= 0 && idx < ic.length ? $(ic[idx]).text().trim() : "");
         const title = c(titleIdx);
         if (!title) continue;
+        // Blank cells are unpublished, never 0: a missing Scored must read as
+        // "not yet scored", not as a scored zero that depresses totals.
+        const f = (s: string): number | null => {
+          const n = parseFloat(s);
+          return Number.isFinite(n) ? n : null;
+        };
         record.marks.push({
           component: title,
-          maxMarks: parseFloat(c(maxIdx)) || 0,
-          scored: parseFloat(c(scoredIdx)) || 0,
-          maxWeightage: parseFloat(c(maxWeightageIdx)) || 0,
-          weightage: parseFloat(c(weightageIdx)) || 0,
+          maxMarks: f(c(maxIdx)),
+          scored: f(c(scoredIdx)),
+          maxWeightage: f(c(maxWeightageIdx)),
+          weightage: f(c(weightageIdx)),
           average: parseFloat(c(averageIdx)) || null,
           status: c(statusIdx),
         });
@@ -774,7 +829,7 @@ export interface LeaveRecord {
   visitPlace: string;
   reason: string;
   leaveType: string;
-  /** ISO where VTOP gave a parseable date, else the raw string. */
+  /** Verbatim as VTOP prints it ("30-OCT-2026 17:00"), not ISO-normalised. */
   from: string;
   to: string;
   /** Verbatim status, e.g. REQUEST APPROVED / HOSTEL APPROVAL PENDING. */
@@ -877,8 +932,10 @@ export function parseLeaveRecords(html: string): LeaveRecord[] {
       visitPlace: at((h) => h.includes("visit")),
       reason: at((h) => h.includes("reason")),
       leaveType: at((h) => h.includes("leave") && h.includes("type")),
-      from: at((h) => h === "from" || h.startsWith("from")),
-      to: at((h) => h === "to" || h.startsWith("to")),
+      from: at((h) => h === "from" || h.startsWith("from ")),
+      // "to" alone would also bind a "Total"/"Token" column: require the
+      // bare header or a separator right after it.
+      to: at((h) => h === "to" || h.startsWith("to ") || h.startsWith("to-")),
       status,
       remarks: at((h) => h.includes("remark")),
       // Headers are literally "Gate Pass OUT" / "Gate Pass IN". Match on both
@@ -895,7 +952,9 @@ export function parseExamSchedule(html: string): ExamSchedule[] {
   const $ = cheerio.load(html);
   const schedules: ExamSchedule[] = [];
 
-  if (html.toLowerCase().includes("not found")) return schedules;
+  // Genuine empty first: VTOP prints "No Records/Found" phrasings. A bare
+  // "not found" substring matched course titles and boilerplate — never that.
+  if (RECOGNISED_EMPTY.test(html)) return schedules;
 
   // Walk rows. The header row is the first one with a "Slot" cell (Bhopal puts a
   // "General (Semester)" row above it); single-cell rows are exam-type titles
@@ -905,7 +964,10 @@ export function parseExamSchedule(html: string): ExamSchedule[] {
   const headerAt = rows.findIndex((r) =>
     $(r).children("td,th").toArray().some((c) => text(c).toLowerCase() === "slot"),
   );
-  if (headerAt < 0) return schedules;
+  if (headerAt < 0) {
+    assertPageShape(false, "exam schedule", html);
+    return schedules;
+  }
 
   const headings = $(rows[headerAt])
     .children("td,th")
@@ -957,6 +1019,14 @@ export function parseExamSchedule(html: string): ExamSchedule[] {
 
 // "P" = pass in a non-credit course (Bhopal); recognised as a grade, kept out of GPA.
 const GRADE_SET = new Set<string>([...GRADE_LETTERS, "P"]);
+
+/**
+ * Grades that count as a completed AND earned course. Shared by grade-history
+ * earned-credit totals and pending-subject detection so the two can never
+ * disagree on the same row (a blank/unknown grade earns nothing and stays
+ * pending). F failed, N never graded.
+ */
+const PASSING_GRADES = new Set(["S", "A", "B", "C", "D", "E", "P"]);
 /** "Nov 2025", "November-2025", "Nov'2025" — an exam-month token. A real month
  * name is required: a bare letters+digits pattern also matched course codes
  * (ENG1004), so every course became its own "semester". */
@@ -1057,8 +1127,11 @@ export function parseGradeHistory(html: string): GradeHistory {
   const monthTime = (m: string) => Date.parse(`1 ${m.replace(/[-.,']/g, " ")}`) || 0;
   const byDate = [...grouped].sort(([a], [b]) => monthTime(a) - monthTime(b));
   for (const [examMonth, grades] of byDate) {
+    // Earned shares pending's definition of "completed": only the passing
+    // set banks credit, so a blank/unknown grade can never be both earned
+    // here and pending there.
     const earnedCredits = grades.reduce(
-      (s, g) => s + (g.grade === "F" || g.grade === "N" ? 0 : g.credits),
+      (s, g) => s + (PASSING_GRADES.has(g.grade) ? g.credits : 0),
       0
     );
     const graded = grades.filter((g) => g.grade && g.grade !== "P");
@@ -1492,23 +1565,30 @@ export function parseCurriculumBaskets(html: string): CurriculumBasket[] {
     }
 
     const courses: CurriculumCourse[] = [];
+    const seen = new Set<string>();
     $table.find("tbody tr, tr").each((_, tr) => {
       const $tr = $(tr);
       const tds = $tr.children("td").toArray();
       if (tds.length < 8) return;
       const texts = tds.map((c) => clean($(c as never).text()));
-      // Course code sits in the second cell, possibly beside a syllabus icon.
-      const code = (texts[1].match(/[A-Z]{2,}\d+[A-Z]*/)?.[0] ?? "").trim();
-      if (!/^[A-Z]{2,}\d/.test(code)) return;
+      // Course code located by content, not column index: a prepended
+      // checkbox/Sl.No column would otherwise shift every field. Remaining
+      // fields anchor relative to the code cell for the same reason.
+      const codeIdx = texts.findIndex((t) => /^[A-Z]{2,}\d+[A-Z]*$/.test(t.trim()));
+      if (codeIdx < 0) return;
+      const code = (texts[codeIdx].match(/[A-Z]{2,}\d+[A-Z]*/)?.[0] ?? "").trim();
+      if (!/^[A-Z]{2,}\d/.test(code) || seen.has(code)) return;
+      seen.add(code);
+      const at = (i: number) => texts[codeIdx + i] ?? "";
       courses.push({
         code,
-        title: texts[2] ?? "",
-        type: texts[3] ?? "",
-        version: texts[4] ?? "",
-        l: num(texts[5] ?? ""),
-        t: num(texts[6] ?? ""),
-        p: num(texts[7] ?? ""),
-        j: num(texts[8] ?? ""),
+        title: at(1),
+        type: at(2),
+        version: at(3),
+        l: num(at(4)),
+        t: num(at(5)),
+        p: num(at(6)),
+        j: num(at(7)),
         credits: num(texts[texts.length - 1] ?? ""),
         vtopMarkedCompleted: ($tr.attr("class") ?? "").split(/\s+/).includes("bg-success"),
       });
@@ -1519,9 +1599,6 @@ export function parseCurriculumBaskets(html: string): CurriculumBasket[] {
 
   return baskets;
 }
-
-/** Grades that count as a completed course. F failed, N never graded. */
-const PASSING_GRADES = new Set(["S", "A", "B", "C", "D", "E", "P"]);
 
 /**
  * Pending subjects = curriculum baskets minus grade-history passes.

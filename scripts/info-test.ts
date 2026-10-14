@@ -51,7 +51,17 @@ const fakeClient = {
     return FEE_RECEIPTS_HTML;
   },
   async getFeeReceiptDetailHtml(receitNo: string): Promise<string> {
-    assert.match(receitNo, /^\d+\/\d+\/[A-Z]+$/, "detail ref must be <no>/8/BPL shaped");
+    // Mirrors the real client: bare numbers resolve against the list's
+    // onclick refs, full refs pass through, unknown numbers throw.
+    let ref = receitNo.trim();
+    if (!ref.includes("/")) {
+      const m = FEE_RECEIPTS_HTML.match(
+        new RegExp(`doDuplicateReceipt\\(['"](${ref}/[^'"]+)['"]\\)`),
+      );
+      if (!m) throw new Error(`No receipt ref on file for number "${ref}".`);
+      ref = m[1];
+    }
+    assert.match(ref, /^\d+\/\d+\/[A-Z]+$/, "detail ref must be <no>/<seg>/<campus> shaped");
     return FEE_RECEIPT_DETAIL_HTML;
   },
   async getLeaveHistoryHtml(): Promise<string> {
@@ -178,10 +188,12 @@ async function main() {
     assert.equal(r.fields["Amount Paid"], "6000.0");
     assert.equal(r.fields["Payment Mode"], "ONLINE");
   });
-  await check("get_fee_receipts accepts a bare number and shapes the ref", async () => {
-    // "22222" must reach the client as "22222/8/BPL" (asserted in the fake).
+  await check("get_fee_receipts accepts a bare number and resolves the ref", async () => {
+    // "22222" resolves against the list's VIEW buttons (22222/8/BPL here);
+    // the tool echoes the requested number, not the resolved ref.
     const r = await callJson(client, "get_fee_receipts", { receiptNo: "22222" });
     assert.equal(r.receiptNumber, "22222");
+    assert.ok(Object.keys(r.fields).length > 1 || !("text" in r.fields), "a real breakdown, not a text dump");
   });
 
   // get_leave_history -------------------------------------------------------------
@@ -196,6 +208,34 @@ async function main() {
     assert.equal(r.records[1].status, "REQUEST APPROVED");
     assert.equal(r.records[1].gatePassOut, true);
     assert.equal(r.records[1].gatePassIn, false);
+  });
+
+  await check("disabled modules raise ENDPOINT_NOT_FOUND instead of empty", async () => {
+    // VTOP answers dead routes with HTTP 200 + error modal. Every info-page
+    // getter must raise rather than parse that as "no records".
+    const { VtopClient: RealClient } = await import("../src/services/vtop-client.js");
+    const { VtopError } = await import("../src/services/errors.js");
+    class DeadModule extends RealClient {
+      override async fetchPage(): Promise<string> {
+        return "<div>This menu is not available at present!!!</div>";
+      }
+    }
+    const stub = new DeadModule("https://example.invalid/vtop");
+    for (const call of [
+      () => stub.getAcknowledgmentsHtml(),
+      () => stub.getProctorDetailsHtml(),
+      () => stub.getCurriculumBasketsHtml(),
+      () => stub.getFeeReceiptsHtml(),
+      () => stub.getLeaveHistoryHtml(),
+    ]) {
+      try {
+        await call();
+        assert.fail("expected ENDPOINT_NOT_FOUND");
+      } catch (err) {
+        assert.ok(err instanceof VtopError, "must be a coded error");
+        assert.equal(err.code, "ENDPOINT_NOT_FOUND");
+      }
+    }
   });
 
   // get_calendar classGroup ---------------------------------------------------------

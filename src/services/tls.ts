@@ -57,16 +57,31 @@ yOGBQMkKW+ESPMFgKuOXwIlCypTPRpgSabuY0MLTDXJLR27lk8QyKGOHQ+SwMj4K
 
 /**
  * CA bundle for the VTOP HTTPS agent: Node's bundled public roots PLUS the
- * intermediate VTOP forgets to send. Scoped to VTOP so it never weakens other
- * connections, and works on every Node version (no setDefaultCACertificates).
+ * intermediate VTOP forgets to send, PLUS the OS trust store where readable.
+ * The OS part matters: an explicit `ca` replaces Node's defaults, so without
+ * it a TLS-inspecting egress proxy (corporate CA in the OS store) would fail
+ * on the VTOP path even though applySystemCATrust merged the defaults.
+ * Scoped to VTOP so it never weakens other connections, and works on every
+ * Node version (no setDefaultCACertificates).
  */
 export function vtopCaBundle(): string[] {
-  return [...tls.rootCertificates, SECTIGO_RSA_DV_INTERMEDIATE];
+  const bundle = [...tls.rootCertificates, SECTIGO_RSA_DV_INTERMEDIATE];
+  // getCACertificates needs Node >= 22.15; absence just means OS CAs stay out.
+  try {
+    if (typeof tls.getCACertificates === "function") {
+      for (const cert of tls.getCACertificates("system")) {
+        if (!bundle.includes(cert)) bundle.push(cert);
+      }
+    }
+  } catch {
+    /* fall back to bundled roots + intermediate */
+  }
+  return bundle;
 }
 
 let applied = false;
 
-function isTruthy(v: string | undefined): boolean {
+export function isTruthy(v: string | undefined): boolean {
   if (!v) return false;
   const s = v.trim().toLowerCase();
   return s === "1" || s === "true" || s === "yes" || s === "on";
@@ -74,12 +89,18 @@ function isTruthy(v: string | undefined): boolean {
 
 /**
  * Node bundles its own CA list and ignores the operating-system trust store.
- * That breaks two common deployments with "unable to verify the first
- * certificate": a TLS-inspecting egress proxy (whose leaf is signed by a
- * locally-installed corporate/proxy CA) and a host that relies on a
- * system-installed intermediate. Merging the OS trust store into Node's
- * defaults restores trust without weakening verification — public CAs (VTOP's
- * real certificate) keep validating against the bundled roots. Idempotent.
+ * That breaks hosts relying on system-installed intermediates. Merging the OS
+ * trust store into Node's defaults restores trust without weakening
+ * verification. Idempotent.
+ *
+ * NOTE: this does not affect VTOP connections — those use vtopCaBundle()
+ * (which already includes the OS store) via an explicit agent `ca`. It helps
+ * any other HTTPS client using Node's defaults.
+ *
+ * VTOP_INSECURE_TLS is deliberately NOT honoured here anymore: disabling
+ * verification process-wide via NODE_TLS_REJECT_UNAUTHORIZED also exposed
+ * Redis, proxies and every future host. The escape hatch now lives on the
+ * VTOP agent only (see buildClient) — other connections stay verified.
  *
  * The runtime CA APIs require Node >= 22.15; on older runtimes this is a no-op
  * and trust falls back to the NODE_EXTRA_CA_CERTS environment variable.
@@ -87,18 +108,6 @@ function isTruthy(v: string | undefined): boolean {
 export function applySystemCATrust(): void {
   if (applied) return;
   applied = true;
-
-  // Last-resort opt-out for hosts behind a TLS-inspecting proxy whose CA is
-  // not installed in the OS trust store (so the merge below cannot help). This
-  // disables certificate verification process-wide and exposes the connection
-  // to interception — only enable it on a network you trust.
-  if (isTruthy(process.env.VTOP_INSECURE_TLS)) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-    console.error(
-      "VtopMCP: VTOP_INSECURE_TLS is set — TLS certificate verification is DISABLED.",
-    );
-    return;
-  }
 
   if (
     typeof tls.getCACertificates !== "function" ||

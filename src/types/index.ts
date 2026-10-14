@@ -8,9 +8,14 @@ export interface AttendanceRecord {
   courseName: string;
   courseType: string;
   slot: string;
-  attended: number;
-  total: number;
-  percentage: number;
+  /**
+   * Parsed counts. null when VTOP prints no usable number ("-", blank) —
+   * unknown, never zero. A real zero means classes happened and none were
+   * attended; null means the figures are not on the page at all.
+   */
+  attended: number | null;
+  total: number | null;
+  percentage: number | null;
 }
 
 export interface TimetableSlot {
@@ -51,10 +56,13 @@ export interface MarksRecord {
   slot: string;
   marks: {
     component: string;
-    maxMarks: number;
-    scored: number;
-    maxWeightage: number;
-    weightage: number;
+    /** Structural maximum; null when the cell carries no number. */
+    maxMarks: number | null;
+    /** null when unpublished — never a scored zero. */
+    scored: number | null;
+    maxWeightage: number | null;
+    /** null when unpublished; contributes nothing to banked totals. */
+    weightage: number | null;
     average: number | null;
     status: string;
   }[];

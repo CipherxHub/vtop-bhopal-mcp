@@ -101,7 +101,41 @@ check("parseAttendance reads attended/total/percentage", () => {
   assert.equal(recs[1].attended, 30);
 });
 
+check("parseAttendance reports dash cells as unknown, never zero", () => {
+  // VTOP prints "-" for courses with no figures yet. Those must come back
+  // null (unknown), not 0/0/0% (debarred with no attendance).
+  const recs = parseAttendance(`<table id="getStudentDetails">
+    <tr><th>Sl.No</th><th>Course Code</th><th>Course Title</th><th>Course Type</th>
+    <th>Slot</th><th>Attended Classes</th><th>Total Classes</th>
+    <th>Attendance Percentage</th><th>Attendance View</th></tr>
+    <tr><td>1</td><td>BTST303L</td><td>Not Started</td><td>Theory Only</td>
+    <td>B1</td><td>-</td><td>-</td><td>-</td><td></td></tr>
+  </table>`);
+  assert.equal(recs.length, 1);
+  assert.equal(recs[0].attended, null);
+  assert.equal(recs[0].total, null);
+  assert.equal(recs[0].percentage, null);
+});
+
 // --- timetable grid ---
+check("parseExamSchedule ignores 'not found' substrings in titles", () => {
+  // The old bare-substring check discarded the whole table when any course
+  // or boilerplate contained "not found". Only genuine empty phrasings
+  // return [], and a missing header without one throws.
+  const html = `<table><tr><td>Slot</td><td>Course Code</td><td>Date</td></tr>
+    <tr><td>A1</td><td>CS101</td><td>20-OCT-2026</td></tr></table>
+    <p>NOT FOUNDations of CS, room 101</p>`;
+  const rows = parseExamSchedule(html);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].courseCode, "CS101");
+});
+
+check("parseExamSchedule throws on a headerless page with no empty marker", () => {
+  assert.throws(
+    () => parseExamSchedule(`<div id="getStudentDetails"><p>Session expired, please login</p></div>`),
+    /UPSTREAM/,
+  );
+});
 check("parseTimetableGrid parses slot/course/venue/time", () => {
   const sessions = parseTimetableGrid(F.TIMETABLE_HTML);
   assert.equal(sessions.length, 3);

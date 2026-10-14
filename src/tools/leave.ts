@@ -109,6 +109,15 @@ function weekdayOf(iso: string): string {
  * preview/confirm handshake to that caller even when their MCP client opens a
  * fresh transport session for each tool call.
  */
+/** Per-client cache of probed type rules: the dropdown constraints cost 2
+ *  VTOP POSTs per type and change rarely. Keyed by client instance — clients
+ *  are per-user, so nothing leaks across users. */
+const typeRulesCache = new WeakMap<
+  VtopClient,
+  { at: number; byCode: Map<string, { label: string; message: string | null; rules: string[]; raw: string }> }
+>;
+const TYPE_RULES_TTL_MS = 30 * 60 * 1000;
+
 export function registerLeaveTools(
   server: McpServer,
   client: VtopClient,
@@ -134,7 +143,15 @@ export function registerLeaveTools(
     },
     async ({ leaveCode }) => {
       const all = parseLeaveTypeOptions(await client.getLeaveFormHtml());
-      const codes = leaveCode ? [leaveCode] : all.map((o) => o.code);
+      const wanted = leaveCode?.trim().toUpperCase();
+      if (wanted && !all.some((o) => o.code.toUpperCase() === wanted)) {
+        throw new Error(
+          `"${leaveCode}" is not a leave type VTOP offers. Valid codes: ${all.map((o) => o.code).join(", ")}.`,
+        );
+      }
+      const codes = wanted ? [all.find((o) => o.code.toUpperCase() === wanted)!.code] : all.map((o) => o.code);
+      const cached = typeRulesCache.get(client);
+      const fresh = cached && Date.now() - cached.at < TYPE_RULES_TTL_MS ? cached.byCode : null;
       const results: {
         code: string;
         label: string;
@@ -142,8 +159,14 @@ export function registerLeaveTools(
         rules: string[];
         raw: string;
       }[] = [];
+      const store = fresh ?? new Map<string, { label: string; message: string | null; rules: string[]; raw: string }>();
 
       for (const code of codes) {
+        const hit = fresh?.get(code);
+        if (hit) {
+          results.push({ code, ...hit });
+          continue;
+        }
         const html = await client.getLeaveTypeConstraints(code);
         const text = cheerioText(html);
         // Pull anything that looks like a stated limit.
@@ -154,14 +177,17 @@ export function registerLeaveTools(
               .filter((s) => s.length > 8 && s.length < 400),
           ),
         ].slice(0, 12);
-        results.push({
-          code,
-          label: all.find((o) => o.code === code)?.label ?? code,
+        const label = all.find((o) => o.code === code)?.label ?? code;
+        const entry = {
+          label,
           message: extractMessage(html),
           rules,
           raw: text.length > 1200 ? text.slice(0, 1200) + " …[truncated]" : text,
-        });
+        };
+        store.set(code, entry);
+        results.push({ code, ...entry });
       }
+      if (!fresh) typeRulesCache.set(client, { at: Date.now(), byCode: store });
 
       return {
         probed: results.length,
@@ -204,7 +230,7 @@ export function registerLeaveTools(
     server,
     "get_leave_status",
     "Get hostel leave applications and their approval status: leave id, type, place, " +
-      "from/to, status (REQUEST APPROVED / HOSTEL APPROVAL PENDING / etc.), approver " +
+      "from/to, status (reported verbatim, e.g. REQUEST RAISED / PROCTOR APPROVAL PENDING / REQUEST APPROVED), approver " +
       "remarks, and gate-pass OUT/IN flags where VTOP publishes them. " +
       "Read-only. Requires login.",
     {},
@@ -295,12 +321,29 @@ export function registerLeaveTools(
         reason: raw.reason.trim(),
       };
 
-      // Leave types come from the live form so an invented code is caught here.
+      // Leave types come from the live form so an invented code is caught
+      // here — except on the confirm path, which must not touch VTOP before
+      // the token is verified. The token already binds the exact code, so the
+      // static list is enough to reject an invented one there.
+      const confirming = confirm === true;
       let knownTypes: string[];
-      try {
-        knownTypes = parseLeaveTypeOptions(await client.getLeaveFormHtml()).map((o) => o.code);
-      } catch {
+      if (confirming) {
         knownTypes = LEAVE_TYPES.map((t) => t.code);
+        if (!knownTypes.includes(request.leaveCode)) {
+          return {
+            request,
+            mode: "CONFIRM REJECTED - nothing submitted",
+            verdict:
+              `"${request.leaveCode}" is not a leave type VTOP offers. Nothing was ` +
+              "submitted, and no VTOP requests were made.",
+          };
+        }
+      } else {
+        try {
+          knownTypes = parseLeaveTypeOptions(await client.getLeaveFormHtml()).map((o) => o.code);
+        } catch {
+          knownTypes = LEAVE_TYPES.map((t) => t.code);
+        }
       }
 
       const validation = validateLeave(request, { todayISO: today, knownTypes });
@@ -313,7 +356,6 @@ export function registerLeaveTools(
       // and in exposed single-user mode anyone who could reach the port could
       // repeat it. Cheap rejection first; the full preview data is only built
       // for callers who already hold a valid token.
-      const confirming = confirm === true;
       if (confirming) {
         if (typeof previewToken !== "string" || !previewToken) {
           return {
@@ -337,8 +379,10 @@ export function registerLeaveTools(
       }
 
       // Server-signed single-use token (issue #6) binding the exact fields.
-      // Only minted on the preview path; a confirm already consumed its token.
-      const previewTokenIssued = issuePreviewToken(request, previewTokenOwner);
+      // Only minted on the preview path; a confirm already consumed its token,
+      // and handing a fresh one out inside a rejection would let callers chain
+      // confirm retries without re-previewing.
+      const previewTokenIssued = confirming ? null : issuePreviewToken(request, previewTokenOwner);
 
       const semesterId = await client.getCurrentSemesterId();
       const overlap = validation.durationDays
@@ -425,10 +469,11 @@ export function registerLeaveTools(
                   : "No exams fall inside this leave",
         },
         previewToken: previewTokenIssued,
-        nextStep:
-          "Show this to the user. If they agree, call apply_leave again with the IDENTICAL " +
-          "fields plus confirm=true and previewToken=" + previewTokenIssued + ". " +
-          "The token is single-use and expires after 10 minutes.",
+        nextStep: confirming
+          ? "Nothing was submitted. Preview again for a fresh single-use token."
+          : "Show this to the user. If they agree, call apply_leave again with the IDENTICAL " +
+            "fields plus confirm=true and previewToken=" + previewTokenIssued + ". " +
+            "The token is single-use and expires after 10 minutes.",
       };
 
       // --- preview path: never writes ---
@@ -509,7 +554,7 @@ export function registerLeaveTools(
         },
         nextStep:
           "Call get_leave_status to see the approval state. A leave is not approved until " +
-          "the proctor acts - REQUEST APPROVED and HOSTEL APPROVAL PENDING are different states.",
+          "the proctor acts - a pending state and REQUEST APPROVED are different states.",
       };
     },
     {

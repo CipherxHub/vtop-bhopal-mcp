@@ -250,11 +250,53 @@ async function main() {
     await close();
   });
 
+  await check("no-slash wording still -> INVALID_CREDENTIALS, not UPSTREAM", async () => {
+    // VTOP also renders "Invalid Username or Password" (no slash). The old
+    // classifier only matched the slash form and misreported this as a
+    // retryable UPSTREAM, inviting lockout-burning retries.
+    const { baseUrl, close } = await startMockVtop({ mode: "invalidCredsOr" });
+    const client = new VtopClient(baseUrl);
+    await client.getCaptcha();
+    await expectCode("no-slash wording", "INVALID_CREDENTIALS", () =>
+      client.login(TEST_USER, TEST_PASS, TEST_CAPTCHA),
+    );
+    await close();
+  });
+
+  await check("three bad logins in a row refuse locally", async () => {
+    // The client must not loop get_captcha -> login forever on the same bad
+    // pair; the third consecutive rejection escalates instead of retrying.
+    const { baseUrl, close } = await startMockVtop();
+    const client = new VtopClient(baseUrl);
+    await client.getCaptcha();
+    await expectCode("first", "INVALID_CREDENTIALS", () =>
+      client.login(TEST_USER, "not-the-password", TEST_CAPTCHA),
+    );
+    await expectCode("second", "INVALID_CREDENTIALS", () =>
+      client.login(TEST_USER, "not-the-password", TEST_CAPTCHA),
+    );
+    await expectCode("third escalates", "MAX_LOGIN_ATTEMPTS", () =>
+      client.login(TEST_USER, "not-the-password", TEST_CAPTCHA),
+    );
+    await close();
+  });
+
   await check("locked account -> ACCOUNT_LOCKED", async () => {
     const { baseUrl, close } = await startMockVtop({ mode: "locked" });
     const client = new VtopClient(baseUrl);
     await client.getCaptcha();
     await expectCode("locked", "ACCOUNT_LOCKED", () =>
+      client.login(TEST_USER, TEST_PASS, TEST_CAPTCHA),
+    );
+    await close();
+  });
+
+  await check("short locked wording still -> ACCOUNT_LOCKED", async () => {
+    // "Account Locked" without "is" must not fall through to UPSTREAM.
+    const { baseUrl, close } = await startMockVtop({ mode: "lockedShort" });
+    const client = new VtopClient(baseUrl);
+    await client.getCaptcha();
+    await expectCode("short locked", "ACCOUNT_LOCKED", () =>
       client.login(TEST_USER, TEST_PASS, TEST_CAPTCHA),
     );
     await close();

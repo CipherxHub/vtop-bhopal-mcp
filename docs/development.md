@@ -156,7 +156,7 @@ condemned.
 | `VTOP_KEEPALIVE_MINUTES` | `5` | Session keepalive interval |
 | `VTOP_SEMESTER_ID` | — | Skip the interactive semester picker |
 | `VTOP_PROXY_URL` | — | Proxy, useful against `RECAPTCHA_REQUIRED` |
-| `VTOP_INSECURE_TLS` | — | Disable TLS verification. **Trusted networks only** |
+| `VTOP_INSECURE_TLS` | — | Disable TLS verification for VTOP connections only (Redis etc. stay verified). **Trusted networks only** |
 | `CONNECTOR_SECRET` | — | Turns the HTTP connector multi-user |
 | `VTOP_DUMP_HTML` | — | `1` writes raw pages to `test-output/` — **contains your data** |
 

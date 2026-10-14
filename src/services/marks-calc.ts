@@ -44,10 +44,12 @@ export const FULL_INTERNAL_SCALE = 100;
 
 export interface ComponentTotal {
   component: string;
-  maxMarks: number;
-  scored: number;
-  maxWeightage: number;
-  weightage: number;
+  maxMarks: number | null;
+  /** null when unpublished — never a scored zero. */
+  scored: number | null;
+  maxWeightage: number | null;
+  /** null when unpublished; contributes nothing to scoredSoFar. */
+  weightage: number | null;
   /** Raw-score percentage for this component alone. */
   percent: number | null;
   status: string;
@@ -120,7 +122,7 @@ export function inferAttendanceRule(records: MarksRecord[]): AttendanceRule {
   for (const r of records) {
     for (const m of r.marks) {
       if (!/attendance/i.test(m.component)) continue;
-      if (m.weightage > 0 && m.weightage < ATTENDANCE_MARKS) return "banded";
+      if (m.weightage != null && m.weightage > 0 && m.weightage < ATTENDANCE_MARKS) return "banded";
     }
   }
   return "unknown";
@@ -192,7 +194,7 @@ export function attendanceForecast(
 ): AttendanceForecast | null {
   // Only relevant while the component is still outstanding.
   const published = rec.marks.some(
-    (m) => /attendance/i.test(m.component) && m.weightage > 0,
+    (m) => /attendance/i.test(m.component) && (m.weightage ?? 0) > 0,
   );
   if (published) return null;
   return {
@@ -308,9 +310,12 @@ export function templateFor(courseMode: string | undefined): ModeTemplate | null
  * these (it normally omits the row), but if one appears with a real weightage
  * and a non-graded status, it is genuinely not yet scored.
  */
-function isPending(maxWeightage: number, scored: number, weightage: number, status: string): boolean {
-  if (maxWeightage <= 0) return false;
-  if (scored > 0 || weightage > 0) return false;
+function isPending(maxWeightage: number | null, scored: number | null, weightage: number | null, status: string): boolean {
+  if ((maxWeightage ?? 0) <= 0) return false;
+  // Nulls count as zero here deliberately: a blank row with an ungraded
+  // status is exactly what "pending" means, while a real scored 0 arrives
+  // with a graded status and is excluded below.
+  if ((scored ?? 0) > 0 || (weightage ?? 0) > 0) return false;
   // A component explicitly graded absent still has a mark of 0 — that is NOT
   // pending, it is a real (bad) score, so don't relabel it.
   if (/absent|present|fail|pass/i.test(status)) return false;
@@ -324,12 +329,12 @@ export function courseTotals(rec: MarksRecord): CourseInternalTotal {
     scored: m.scored,
     maxWeightage: m.maxWeightage,
     weightage: m.weightage,
-    percent: m.maxMarks > 0 ? round2((m.scored / m.maxMarks) * 100) : null,
+    percent: m.maxMarks != null && m.maxMarks > 0 && m.scored != null ? round2((m.scored / m.maxMarks) * 100) : null,
     status: m.status,
     pending: isPending(m.maxWeightage, m.scored, m.weightage, m.status),
   }));
 
-  const scoredSoFar = round2(components.reduce((s, c) => s + c.weightage, 0));
+  const scoredSoFar = round2(components.reduce((s, c) => s + (c.weightage ?? 0), 0));
 
   // How much of each template bucket has been published. Mid Term arrives as
   // either one 30-mark row or two 15-mark rows, so accumulate per bucket.
@@ -338,7 +343,7 @@ export function courseTotals(rec: MarksRecord): CourseInternalTotal {
   for (const c of components) {
     const bucket = bucketFor(c.component);
     if (!bucket) continue;
-    filled.set(bucket, round2((filled.get(bucket) ?? 0) + c.maxWeightage));
+    filled.set(bucket, round2((filled.get(bucket) ?? 0) + (c.maxWeightage ?? 0)));
   }
 
   let outstanding: OutstandingComponent[] = [];

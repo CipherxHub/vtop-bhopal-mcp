@@ -13,7 +13,7 @@ import {
 import { VtopError, isNotAuthenticated, classify } from "./errors.js";
 import { upscaleCaptcha, describeCaptchaSize } from "./captcha-image.js";
 import { TtlCache, liveCacheTtlMs } from "./cache.js";
-import { applySystemCATrust, vtopCaBundle } from "./tls.js";
+import { applySystemCATrust, isTruthy, vtopCaBundle } from "./tls.js";
 import {
   parseCalendarMonths,
   parseAcademicCalendar,
@@ -129,6 +129,13 @@ export class VtopClient {
   private authenticated = false;
   private csrfToken: string | null = null;
   private authorizedID: string | null = null;
+  /**
+   * Consecutive INVALID_CREDENTIALS rejections. A model that ignores the
+   * do-not-retry guidance could otherwise loop get_captcha -> login with the
+   * same wrong password until VTOP locks the account server-side. Past the
+   * cap the client refuses locally. Reset on any successful login.
+   */
+  private consecutiveBadCreds = 0;
 
   /**
    * Fired after the session changes in a way worth persisting (successful login,
@@ -264,20 +271,30 @@ export class VtopClient {
     // verification ON; see tls.ts). Scoped to this agent — other connections
     // (Redis, etc.) are untouched.
     const ca = vtopCaBundle();
+    // Last-resort escape hatch for TLS-inspecting proxies whose CA is nowhere
+    // in any trust store. Scoped to the VTOP agent only — unlike the old
+    // NODE_TLS_REJECT_UNAUTHORIZED kill-switch, Redis and every other host
+    // stay verified. Trusted networks only.
+    const insecure = isTruthy(process.env.VTOP_INSECURE_TLS) ? { rejectUnauthorized: false } : {};
+    if (isTruthy(process.env.VTOP_INSECURE_TLS)) {
+      console.error(
+        "VtopMCP: VTOP_INSECURE_TLS is set — TLS verification is disabled for VTOP connections only.",
+      );
+    }
     if (proxyUrl) {
       // Proxy path: a single agent both tunnels through the proxy and syncs the
       // cookie jar. proxy:false stops axios's own env-proxy logic from
       // double-tunneling.
       return axios.create({
         ...config,
-        httpsAgent: new HttpsProxyCookieAgent(proxyUrl, { cookies: { jar }, ca }),
+        httpsAgent: new HttpsProxyCookieAgent(proxyUrl, { cookies: { jar }, ca, ...insecure }),
         proxy: false,
       });
     }
     // Direct path: cookie agent handles the jar at the socket level.
     return axios.create({
       ...config,
-      httpsAgent: new HttpsCookieAgent({ cookies: { jar }, ca }),
+      httpsAgent: new HttpsCookieAgent({ cookies: { jar }, ca, ...insecure }),
       proxy: false,
     });
   }
@@ -419,7 +436,23 @@ export class VtopClient {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       // initSession resets the jar and rebuilds the clients, so the label —
       // not a held instance — selects which client each attempt uses.
-      const html = await this.initSession(label === "proxy");
+      // A dead network/VTOP outage must surface as a coded error, not a raw
+      // AxiosError with no recovery plan.
+      let html: string;
+      try {
+        html = await this.initSession(label === "proxy");
+      } catch (err) {
+        if (err instanceof VtopError) throw err;
+        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+        if (status === 404) {
+          throw new VtopError(
+            "UPSTREAM",
+            "VTOP did not serve the login page (HTTP 404).",
+            "The prelogin handshake failed before any captcha was seen.",
+          );
+        }
+        throw classify(err);
+      }
       lastHtml = html;
 
       const match =
@@ -593,6 +626,7 @@ export class VtopClient {
       const html: string = res.data;
 
       if (this.absorbAuthFromHtml(html)) {
+        this.consecutiveBadCreds = 0;
         this.onSessionPersist?.();
         if (this.authorizedID) this.onLogin?.(this.authorizedID);
         console.error("VtopMCP: login OK.");
@@ -608,18 +642,30 @@ export class VtopClient {
           "Usually an OCR misread, or the captcha expired between get_captcha and login.",
         );
       }
+      // VTOP's wording varies ("Invalid Username/Password" with a slash,
+      // "Invalid Username or Password" without). Match the nouns and the
+      // connector loosely so a wrong password is never misreported as a
+      // retryable UPSTREAM — retrying it only burns attempts toward lockout.
       if (
-        /invalid\s*(user\s*name|login\s*id|user\s*id)\s*\/\s*password/.test(
+        /invalid\s*(user\s*name|username|login\s*id|user\s*id)[\s/]*(or|\/)?[\s/]*password/.test(
           lower
-        )
+        ) ||
+        /wrong\s*(user\s*name|username|password)/.test(lower)
       ) {
         console.error("VtopMCP: login failed — invalid username/password.");
+        if (++this.consecutiveBadCreds >= 3) {
+          throw new VtopError(
+            "MAX_LOGIN_ATTEMPTS",
+            "Three consecutive bad-credential rejections; refusing to try again locally so the account is not locked.",
+            "Ask the user for fresh credentials instead of retrying the same pair.",
+          );
+        }
         throw new VtopError(
           "INVALID_CREDENTIALS",
           "VTOP rejected the username or password.",
         );
       }
-      if (/account\s*is\s*locked/.test(lower)) {
+      if (/account\s*(is\s*)?locked/.test(lower)) {
         console.error("VtopMCP: login failed — account locked.");
         throw new VtopError(
           "ACCOUNT_LOCKED",
@@ -639,6 +685,7 @@ export class VtopClient {
       try {
         const contentRes = await loginClient.get("/content");
         if (this.absorbAuthFromHtml(contentRes.data)) {
+          this.consecutiveBadCreds = 0;
           this.onSessionPersist?.();
           if (this.authorizedID) this.onLogin?.(this.authorizedID);
           console.error("VtopMCP: login OK (via /content fallback).");
@@ -944,43 +991,63 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
    * verifyMenu/authorizedID/_csrf POST: acknowledgments, proctor details,
    * curriculum baskets, fee receipts, leave history.
    */
-  private async getInfoPage(endpoint: string): Promise<string> {
-    return this.fetchPage(endpoint, {
+  private async getInfoPage(endpoint: string, what?: string): Promise<string> {
+    const html = await this.fetchPage(endpoint, {
       verifyMenu: "true",
       nocache: String(Date.now()),
     });
+    // VTOP answers a disabled/unreachable module with HTTP 200 carrying an
+    // error modal. That must raise ENDPOINT_NOT_FOUND here — never flow into
+    // a parser as "no records".
+    this.assertLeaveReachable(html, what ?? endpoint);
+    return html;
   }
 
   /** Admission document checklist (Submitted / Not Applicable / Not Submitted). */
   async getAcknowledgmentsHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.acknowledgments);
+    return this.getInfoPage(ENDPOINTS.acknowledgments, "acknowledgments");
   }
 
   /** Standalone proctor view. Same data as the profile's proctor section. */
   async getProctorDetailsHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.proctorDetails);
+    return this.getInfoPage(ENDPOINTS.proctorDetails, "proctor details");
   }
 
   /** Programme curriculum baskets (per-category course tables). */
   async getCurriculumBasketsHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.curriculumBaskets);
+    return this.getInfoPage(ENDPOINTS.curriculumBaskets, "curriculum baskets");
   }
 
   /** Fee receipt list (number/date/amount/campus). */
   async getFeeReceiptsHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.feeReceipts);
+    return this.getInfoPage(ENDPOINTS.feeReceipts, "fee receipts");
   }
 
   /**
    * One receipt's detail HTML (as rendered into the page's receipt panel).
    *
-   * Needs the receipt ref exactly as printed on the list's VIEW button
-   * (`<number>/8/BPL`) plus the applno/registerNumber hidden fields from the
-   * list page — fetched here so callers pass only the ref.
+   * Accepts a bare number ("22222") or the full ref as printed on the list's
+   * VIEW button ("22222/8/BPL"). A bare number is resolved against the list's
+   * onclick refs — never synthesised — so a campus/segment change surfaces as
+   * UPSTREAM instead of a silent detail miss.
    */
   async getFeeReceiptDetailHtml(receitNo: string): Promise<string> {
     this.ensureAuthenticated();
     const listHtml = await this.getFeeReceiptsHtml();
+    let ref = receitNo.trim();
+    if (!ref.includes("/")) {
+      const m = listHtml.match(
+        new RegExp(`doDuplicateReceipt\\(['"](${ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/[^'"]+)['"]\\)`)
+      );
+      if (!m) {
+        throw new VtopError(
+          "UPSTREAM",
+          `No receipt ref on file for number "${ref}".`,
+          "The receipt list carries no VIEW button for it — it may not exist, or the list layout changed.",
+        );
+      }
+      ref = m[1];
+    }
     const hidden = (name: string): string => {
       const m = listHtml.match(
         new RegExp(`<input[^>]+name="${name}"[^>]+value="([^"]*)"`, "i"),
@@ -990,7 +1057,7 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
       return m ? m[1] : "";
     };
     return this.postWithAuth(ENDPOINTS.feeReceiptDetail, {
-      receitNo,
+      receitNo: ref,
       applno: hidden("applno"),
       registerNumber: hidden("regno") || hidden("registerNumber") || this.registrationNumber || "",
       authorizedID: this.authorizedID!,
@@ -1000,7 +1067,7 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
 
   /** Full leave history (status + approved past records + gate-pass state). */
   async getLeaveHistoryHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.leaveHistory);
+    return this.getInfoPage(ENDPOINTS.leaveHistory, "leave history");
   }
 
   /**
@@ -1056,7 +1123,19 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
         classGroupId,
         x: x(),
       });
-      this.cachedCalendarMonths = parseCalendarMonths(listHtml);
+      const months = parseCalendarMonths(listHtml);
+      // An error shell parses to zero months. Caching that would poison every
+      // getCalendar call for the whole session (all zero upcomingSessions
+      // with no warning), so refuse and let the next call refetch —
+      // mirroring the grade-history guard.
+      if (months.length === 0) {
+        throw new VtopError(
+          "UPSTREAM",
+          "VTOP returned no calendar months for this semester.",
+          "The month list came back empty; the portal may have served an error page. Not treated as 'teaching over'.",
+        );
+      }
+      this.cachedCalendarMonths = months;
       this.cachedCalendarSem = cacheKey;
       this.cachedCalendarDays = {};
     }
@@ -1067,7 +1146,9 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
       const ym = calDateMonthKey(cd);
       return ym && ym >= fromYM && ym <= toYM;
     });
-    // Fetch any uncached months in the range concurrently.
+    // Fetch any uncached months in the range concurrently. Only cache months
+    // that actually parsed to days — an error shell parses to [] and must
+    // not poison the session cache.
     const missing = wanted.filter((cd) => !this.cachedCalendarDays[cd]);
     await pMap(missing, async (cd) => {
       const html = await this.postWithAuth(ENDPOINTS.calendarMonth, {
@@ -1076,7 +1157,8 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
         classGroupId,
         x: x(),
       });
-      this.cachedCalendarDays[cd] = parseAcademicCalendar(html, cd);
+      const days = parseAcademicCalendar(html, cd);
+      if (days.length > 0) this.cachedCalendarDays[cd] = days;
     });
 
     const out: CalendarDay[] = [];
@@ -1117,9 +1199,14 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
       // Must carry the same auth fields a real request does. An earlier version
       // POSTed a bare body, which VTOP 404s unconditionally — so the probe
       // "confirmed" a dead session on every single 404 and the fix was inert.
+      // Same shape as getTimetableHtml (including semesterSubId when known),
+      // so a 404 means the session is dead rather than the params are wrong.
       const formData = new URLSearchParams();
       formData.append("authorizedID", this.authorizedID!);
       if (this.csrfToken) formData.append("_csrf", this.csrfToken);
+      if (this.cachedActiveSemesterId) {
+        formData.append("semesterSubId", this.cachedActiveSemesterId);
+      }
       const res = await this.dataClient().post(ENDPOINTS.timetable, formData, {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
@@ -1169,13 +1256,21 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
           // error — previously a missing VTOP_DUMP_DIR threw ENOENT from inside
           // this try block and turned every data tool into "UPSTREAM: no such
           // file or directory".
+          // Identity pages (profile, proctor) are never dumped: they carry
+          // family/hostel PII that must not land on disk as a side effect.
+          const identityPage = /studentsRecord|proctor/i.test(endpoint);
+          if (identityPage) {
+            console.error(`VtopMCP: skipping HTML dump for identity page ${endpoint}.`);
+          }
           try {
-            const fs = await import("node:fs/promises");
-            const path = await import("node:path");
-            const dir = process.env.VTOP_DUMP_DIR;
-            await fs.mkdir(dir, { recursive: true });
-            const safe = endpoint.replace(/[^\w-]+/g, "_");
-            await fs.writeFile(path.join(dir, `${safe}.html`), html);
+            if (!identityPage) {
+              const fs = await import("node:fs/promises");
+              const path = await import("node:path");
+              const dir = process.env.VTOP_DUMP_DIR;
+              await fs.mkdir(dir, { recursive: true });
+              const safe = endpoint.replace(/[^\w-]+/g, "_");
+              await fs.writeFile(path.join(dir, `${safe}.html`), html);
+            }
           } catch (err: unknown) {
             console.error(
               "VtopMCP: could not dump HTML for",

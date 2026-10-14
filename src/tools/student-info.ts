@@ -12,7 +12,7 @@ export function registerStudentInfoTools(server: McpServer, client: VtopClient) 
   mkJsonTool(
     server,
     "get_student_profile",
-    "Full student profile: the five accordion sections of VTOP's profile page (personal, educational, family, proctor, hostel information), exactly as VTOP groups them with verbatim values. Use this instead of get_profile when you need anything beyond name/programme/branch/email/phone — date of birth, addresses, board/school, parents, proctor contact, hostel block and room. If the response contains NOT_AUTHENTICATED, immediately call get_captcha then login then retry this tool. login auto-uses VTOP_USERNAME/VTOP_PASSWORD env vars if set; if login replies that credentials are missing, ask the user for their VTOP username and password and call login again with them. Requires login.",
+    "Full student profile: the five accordion sections of VTOP's profile page (personal, educational, family, proctor, hostel information), exactly as VTOP groups them with verbatim values. Use this instead of get_profile when you need anything beyond name/programme/branch/email/phone — date of birth, addresses, board/school, parents, proctor contact, hostel block and room. Privacy: this returns sensitive PII verbatim — keep it in the student's own session, don't paste it elsewhere. If the response contains NOT_AUTHENTICATED, immediately call get_captcha then login then retry this tool. login auto-uses VTOP_USERNAME/VTOP_PASSWORD env vars if set; if login replies that credentials are missing, ask the user for their VTOP username and password and call login again with them. Requires login.",
     EmptySchema.shape,
     async () => {
       const sections = parseStudentProfileFull(await client.getProfileHtml());
