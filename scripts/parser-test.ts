@@ -12,6 +12,7 @@ import {
   parseAttendance,
   parseAttendanceDetailRefs,
   parseAttendanceDetail,
+  parseAttendanceDetailRows,
   parseGradeHistory,
   parseExamSchedule,
   parseProgrammeBranch,
@@ -192,6 +193,17 @@ check("parseAttendanceDetail counts statuses + OD hours (lab=2)", () => {
   assert.equal(d.onDuty, 2);
   assert.equal(d.total, 4);
   assert.equal(d.odHours, 3);
+});
+check("parseAttendanceDetailRows returns one row per session, ISO dates", () => {
+  const rows = parseAttendanceDetailRows(F.ATT_DETAIL_HTML);
+  assert.ok(rows.length >= 4, `expected rows, got ${rows.length}`);
+  for (const r of rows) {
+    assert.match(r.date, /^\d{4}-\d{2}-\d{2}$/, `ISO date, got ${r.date}`);
+    assert.ok(["present", "absent", "on-duty", "unknown"].includes(r.marker));
+  }
+  assert.ok(rows.some((r) => r.marker === "present"));
+  assert.ok(rows.some((r) => r.marker === "absent"));
+  assert.ok(rows.some((r) => r.marker === "on-duty"));
 });
 check("parseAttendanceDetail handles 12-hour AM/PM timings (noon-crossing lab)", () => {
   const d = parseAttendanceDetail(F.ATT_DETAIL_AMPM_HTML);

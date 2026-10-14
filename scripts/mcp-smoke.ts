@@ -23,6 +23,7 @@ const EXPECTED_TOOLS = [
   "get_semesters",
   "logout",
   "get_attendance",
+  "get_attendance_detail",
   "get_timetable",
   "get_marks",
   "get_internal_totals",

@@ -66,6 +66,9 @@ const fakeClient = {
   async getAttendanceHtml(): Promise<string> {
     return F.ATT_MAIN_HTML;
   },
+  async getAttendanceDetailHtml(): Promise<string> {
+    return F.ATT_DETAIL_HTML;
+  },
   async getExamScheduleHtml(): Promise<string> {
     return F.EXAM_SCHEDULE_BHOPAL_HTML;
   },
@@ -210,6 +213,26 @@ async function main() {
     assert.match(res.content.find((c) => c.type === "text")?.text ?? "", /YYYY-MM-DD/);
   });
 
+
+  await check("get_attendance_detail answers present/absent/not-posted per day", async () => {
+    // ATT_DETAIL_HTML rows: 01-Jan-2026 Present, 03-Jan-2026 On Duty, ...
+    const present = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L", date: "2026-01-01" });
+    assert.equal(present.verdict, "PRESENT");
+    const missing = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L", date: "2026-02-02" });
+    assert.equal(missing.verdict, "NOT POSTED");
+    const all = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L" });
+    assert.ok(all.count >= 4 && all.rows.length === all.count);
+  });
+  await check("get_attendance_detail rejects unknown courses and bad dates", async () => {
+    const noRef = (await client.callTool({ name: "get_attendance_detail", arguments: { courseCode: "NOPE9999" } })) as {
+      isError?: boolean;
+    };
+    assert.equal(noRef.isError ?? false, true, "unknown course must be an error");
+    const badDate = (await client.callTool({ name: "get_attendance_detail", arguments: { courseCode: "BTST101L", date: "yesterday" } })) as {
+      isError?: boolean;
+    };
+    assert.equal(badDate.isError ?? false, true, "bad date must be an error");
+  });
 
   await client.close();
   await server.close();

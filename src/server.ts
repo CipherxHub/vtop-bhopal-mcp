@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "./services/vtop-client.js";
 import type { Credentials } from "./types/index.js";
 import { registerAuthTools } from "./tools/auth.js";
-import { registerAttendanceTool } from "./tools/attendance.js";
+import { registerAttendanceTool, registerAttendanceDetailTool } from "./tools/attendance.js";
 import { registerTimetableTool } from "./tools/timetable.js";
 import { registerMarksTool } from "./tools/marks.js";
 import { registerExamScheduleTool } from "./tools/exam-schedule.js";
@@ -44,6 +44,7 @@ export function createServer(
   // credentials decrypted from the connector token (multi-user HTTP mode).
   registerAuthTools(server, client, credentials);
   registerAttendanceTool(server, client);
+  registerAttendanceDetailTool(server, client);
   registerTimetableTool(server, client);
   registerMarksTool(server, client);
   registerExamScheduleTool(server, client);

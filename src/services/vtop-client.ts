@@ -17,6 +17,7 @@ import { applySystemCATrust, isTruthy, vtopCaBundle } from "./tls.js";
 import {
   parseCalendarMonths,
   parseAcademicCalendar,
+  hasAttendanceDetailTable,
   calDateMonthKey,
 } from "./vtop-parser.js";
 import type { CalendarDay } from "./attendance-calc.js";
@@ -898,6 +899,31 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
   /** Attendance page for a semester, TTL-cached (default 60s). */
   getAttendanceHtml(semesterId: string, refresh = false): Promise<string> {
     return this.fetchCachedPage(`attendance:${semesterId}`, ENDPOINTS.attendance, { semesterSubId: semesterId }, refresh);
+  }
+
+  /**
+   * Per-class detail for one course (processViewAttendanceDetail). The Bhopal
+   * request shape (semesterSubId/registerNumber/courseId/courseType, from the
+   * row's callStudentAttendanceDetailDisplay handle) was reconstructed from
+   * page markup and is UNVERIFIED against a live request — so the response is
+   * validated: no detail table means UPSTREAM, never an empty success. First
+   * live use that throws here means the payload shape needs correcting, not
+   * that the course has no detail.
+   */
+  async getAttendanceDetailHtml(params: Record<string, string>): Promise<string> {
+    this.ensureAuthenticated();
+    const html = await this.postWithAuth(ENDPOINTS.attendanceDetail, {
+      ...params,
+      x: new Date().toUTCString(),
+    });
+    if (!hasAttendanceDetailTable(html)) {
+      throw new VtopError(
+        "UPSTREAM",
+        "VTOP returned no per-class detail table for these parameters.",
+        "The detail request shape may be wrong for this campus, or the course has no detail view. Not treated as empty attendance.",
+      );
+    }
+    return html;
   }
 
   /** Exam schedule for a semester, TTL-cached (default 60s). */

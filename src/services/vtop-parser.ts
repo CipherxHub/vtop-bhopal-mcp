@@ -570,15 +570,48 @@ function periodsFromTiming(timing: string): number {
 
 /**
  * Parse a per-class attendance detail (processViewAttendanceDetail) and tally
- * statuses.
- *
- * @deprecated DEAD PATH: no tool or VtopClient method posts to
- * ENDPOINTS.attendanceDetail, so the Bhopal-vs-Chennai request shape is
- * unverified and these tallies never reach a user. Kept (and tested) for the
- * day a caller is wired; do not treat as covered surface until then.
+ * statuses. Row-level data lives in parseAttendanceDetailRows below; the
+ * get_attendance_detail tool posts to this endpoint (Bhopal request shape
+ * still fails loud via hasAttendanceDetailTable until verified live).
  */
-export function parseAttendanceDetail(html: string): AttendanceDetailCounts {
-  const $ = cheerio.load(html);
+
+/** One per-class attendance row: a single class session and its outcome. */
+export interface AttendanceDetailRow {
+  /** ISO YYYY-MM-DD when the printed date parses, else verbatim. */
+  date: string;
+  /** Day-and-timing cell verbatim (e.g. "MON,08:00-08:50"). May be "". */
+  timing: string;
+  /** Status verbatim as VTOP prints it (Present / Absent / On Duty / …). */
+  status: string;
+  /** Normalised bucket: present | absent | on-duty | unknown. */
+  marker: "present" | "absent" | "on-duty" | "unknown";
+}
+
+const DETAIL_MONTHS: Record<string, string> = {
+  JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
+  JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12",
+};
+
+/** Detail dates print as DD-MMM-YYYY ("01-Jan-2026") or DD-MM-YYYY ("25-09-2026"). */
+export function normaliseDetailDate(raw: string): string {
+  const s = (raw ?? "").trim();
+  let m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(s);
+  if (m) {
+    const mo = DETAIL_MONTHS[m[2].toUpperCase()];
+    if (mo) return `${m[3]}-${mo}-${m[1].padStart(2, "0")}`;
+  }
+  m = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(s);
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  return s;
+}
+
+/** Locate the per-class detail table and its column indices, if present. */
+function detailTable($: cheerio.CheerioAPI): {
+  rows: ReturnType<cheerio.CheerioAPI>;
+  statusIdx: number;
+  timingIdx: number;
+  dateIdx: number;
+} | null {
   // The per-class table: the longest one whose header row has date + status
   // columns. Bhopal puts a one-row course-summary table (also date/status
   // headers) first, and the per-class header in <thead>.
@@ -588,28 +621,77 @@ export function parseAttendanceDetail(html: string): AttendanceDetailCounts {
     .toArray()
     .filter((t) => /date/.test(headerOf(t)) && /status/.test(headerOf(t)))
     .sort((a, b) => $(b).find("tr").length - $(a).find("tr").length);
-  const tableEl = candidates[0] ?? $("table").first()[0];
+  // No fallback to the first table: an unrelated table would parse its last
+  // cells as statuses and fabricate rows. Absence means absence.
+  const tableEl = candidates[0];
+  if (!tableEl) return null;
   const rows = $(tableEl).find("tr");
-
   const headers = $(rows[0])
     .find("td, th")
     .map((_i, e) => $(e).text().replace(/\s+/g, " ").trim().toLowerCase())
     .get();
-  const statusIdx = headers.findIndex((h) => h.includes("status"));
-  const timingIdx = headers.findIndex((h) => h.includes("timing") || (h.includes("day") && h.includes("time")));
-  const dateIdx = headers.findIndex((h) => h.includes("date"));
+  return {
+    rows,
+    statusIdx: headers.findIndex((h) => h.includes("status")),
+    timingIdx: headers.findIndex((h) => h.includes("timing") || (h.includes("day") && h.includes("time"))),
+    dateIdx: headers.findIndex((h) => h.includes("date")),
+  };
+}
 
-  const counts: AttendanceDetailCounts = { present: 0, absent: 0, onDuty: 0, total: 0, other: 0, odHours: 0, odDates: [] };
-  rows.slice(1).each((_i, r) => {
+/** True when the HTML carries a per-class detail table at all. */
+export function hasAttendanceDetailTable(html: string): boolean {
+  const $ = cheerio.load(html);
+  return detailTable($) !== null;
+}
+
+function detailMarker(status: string): AttendanceDetailRow["marker"] {
+  const s = status.toLowerCase();
+  if (/on\s*duty/.test(s)) return "on-duty";
+  if (/present/.test(s)) return "present";
+  if (/absent/.test(s)) return "absent";
+  return "unknown";
+}
+
+/**
+ * Per-class attendance rows (processViewAttendanceDetail response): one entry
+ * per class session with its date and outcome. A date with no row means VTOP
+ * has posted nothing for it — "not posted", never "absent".
+ */
+export function parseAttendanceDetailRows(html: string): AttendanceDetailRow[] {
+  const $ = cheerio.load(html);
+  const found = detailTable($);
+  if (!found) return [];
+  const out: AttendanceDetailRow[] = [];
+  found.rows.slice(1).each((_i, r) => {
     const cells = $(r).find("td").map((_j, e) => $(e).text().replace(/\s+/g, " ").trim()).get();
     if (cells.length === 0) return;
-    const status = (statusIdx >= 0 ? cells[statusIdx] : cells[cells.length - 1] ?? "").toLowerCase();
+    const status = found.statusIdx >= 0 ? cells[found.statusIdx] : cells[cells.length - 1] ?? "";
+    if (!status) return;
+    out.push({
+      date: normaliseDetailDate(found.dateIdx >= 0 ? (cells[found.dateIdx] ?? "") : ""),
+      timing: found.timingIdx >= 0 ? (cells[found.timingIdx] ?? "") : "",
+      status,
+      marker: detailMarker(status),
+    });
+  });
+  return out;
+}
+
+export function parseAttendanceDetail(html: string): AttendanceDetailCounts {
+  const $ = cheerio.load(html);
+  const found = detailTable($);
+  const counts: AttendanceDetailCounts = { present: 0, absent: 0, onDuty: 0, total: 0, other: 0, odHours: 0, odDates: [] };
+  if (!found) return counts;
+  found.rows.slice(1).each((_i, r) => {
+    const cells = $(r).find("td").map((_j, e) => $(e).text().replace(/\s+/g, " ").trim()).get();
+    if (cells.length === 0) return;
+    const status = (found.statusIdx >= 0 ? cells[found.statusIdx] : cells[cells.length - 1] ?? "").toLowerCase();
     if (!status) return;
     counts.total++;
     if (/on\s*duty/.test(status)) {
       counts.onDuty++;
-      counts.odHours += periodsFromTiming(timingIdx >= 0 ? cells[timingIdx] ?? "" : "");
-      if (dateIdx >= 0 && cells[dateIdx]) counts.odDates.push(cells[dateIdx]);
+      counts.odHours += periodsFromTiming(found.timingIdx >= 0 ? cells[found.timingIdx] ?? "" : "");
+      if (found.dateIdx >= 0 && cells[found.dateIdx]) counts.odDates.push(cells[found.dateIdx]);
     } else if (/present/.test(status)) counts.present++;
     else if (/absent/.test(status)) counts.absent++;
     else counts.other++;
