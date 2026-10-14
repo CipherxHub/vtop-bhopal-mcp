@@ -118,6 +118,24 @@ check("parseAttendance reports dash cells as unknown, never zero", () => {
 });
 
 // --- timetable grid ---
+check("parseExamSchedule ignores 'not found' substrings in titles", () => {
+  // The old bare-substring check discarded the whole table when any course
+  // or boilerplate contained "not found". Only genuine empty phrasings
+  // return [], and a missing header without one throws.
+  const html = `<table><tr><td>Slot</td><td>Course Code</td><td>Date</td></tr>
+    <tr><td>A1</td><td>CS101</td><td>20-OCT-2026</td></tr></table>
+    <p>NOT FOUNDations of CS, room 101</p>`;
+  const rows = parseExamSchedule(html);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].courseCode, "CS101");
+});
+
+check("parseExamSchedule throws on a headerless page with no empty marker", () => {
+  assert.throws(
+    () => parseExamSchedule(`<div id="getStudentDetails"><p>Session expired, please login</p></div>`),
+    /UPSTREAM/,
+  );
+});
 check("parseTimetableGrid parses slot/course/venue/time", () => {
   const sessions = parseTimetableGrid(F.TIMETABLE_HTML);
   assert.equal(sessions.length, 3);

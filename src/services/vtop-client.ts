@@ -1108,7 +1108,19 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
         classGroupId,
         x: x(),
       });
-      this.cachedCalendarMonths = parseCalendarMonths(listHtml);
+      const months = parseCalendarMonths(listHtml);
+      // An error shell parses to zero months. Caching that would poison every
+      // getCalendar call for the whole session (all zero upcomingSessions
+      // with no warning), so refuse and let the next call refetch —
+      // mirroring the grade-history guard.
+      if (months.length === 0) {
+        throw new VtopError(
+          "UPSTREAM",
+          "VTOP returned no calendar months for this semester.",
+          "The month list came back empty; the portal may have served an error page. Not treated as 'teaching over'.",
+        );
+      }
+      this.cachedCalendarMonths = months;
       this.cachedCalendarSem = cacheKey;
       this.cachedCalendarDays = {};
     }
@@ -1119,7 +1131,9 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
       const ym = calDateMonthKey(cd);
       return ym && ym >= fromYM && ym <= toYM;
     });
-    // Fetch any uncached months in the range concurrently.
+    // Fetch any uncached months in the range concurrently. Only cache months
+    // that actually parsed to days — an error shell parses to [] and must
+    // not poison the session cache.
     const missing = wanted.filter((cd) => !this.cachedCalendarDays[cd]);
     await pMap(missing, async (cd) => {
       const html = await this.postWithAuth(ENDPOINTS.calendarMonth, {
@@ -1128,7 +1142,8 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
         classGroupId,
         x: x(),
       });
-      this.cachedCalendarDays[cd] = parseAcademicCalendar(html, cd);
+      const days = parseAcademicCalendar(html, cd);
+      if (days.length > 0) this.cachedCalendarDays[cd] = days;
     });
 
     const out: CalendarDay[] = [];

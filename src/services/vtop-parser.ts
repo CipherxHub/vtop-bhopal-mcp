@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import type { Weekday, WeeklySchedule, CalendarDay } from "./attendance-calc.js";
+import { VtopError } from "./errors.js";
 import type {
   AttendanceRecord,
   TimetableSlot,
@@ -22,6 +23,23 @@ import type {
   FeeReceipt,
 } from "../types/index.js";
 import { GRADE_LETTERS, GRADE_POINTS } from "./constants.js";
+
+/**
+ * VTOP's recognised "genuinely empty" phrasings. When the expected container
+ * is absent AND none of these appear, the page is a changed layout or an
+ * error shell — which must throw UPSTREAM, never degrade to "nothing
+ * published yet" with ok:true.
+ */
+const RECOGNISED_EMPTY = /no\s*(records?|data)\s*(found|to\s*(show|display))?/i;
+
+function assertPageShape(found: boolean, what: string, html: string): void {
+  if (found || RECOGNISED_EMPTY.test(html)) return;
+  throw new VtopError(
+    "UPSTREAM",
+    `VTOP returned a ${what} page without the expected table.`,
+    "The portal layout may have changed, or this is an error page. Not treated as empty data.",
+  );
+}
 
 /**
  * Compute creditsRemaining (clamped ≥ 0) and percentComplete (rounded to
@@ -134,7 +152,7 @@ export function parseAttendance(html: string): AttendanceRecord[] {
   // when there were no <th>s (colCount 0).
   const root = $("#getStudentDetails").first();
   const table = root.is("table") ? root : root.find("table").first();
-  if (!table.length) return records;
+  assertPageShape(table.length > 0, "attendance", html);
 
   const rows = table.find("tr").toArray();
   if (!rows.length) return records;
@@ -232,10 +250,8 @@ export function parseCourses(
   }[] = [];
 
   const container = $("#studentDetailsList");
-  if (!container.length) return courses;
-
   const table = container.find("table").first();
-  if (!table.length) return courses;
+  assertPageShape(table.length > 0, "timetable course list", html);
 
   const headings: string[] = [];
   table.find("th").each((_i, el) => {
@@ -373,7 +389,10 @@ export function parseTimetableGrid(html: string): GridSession[] {
       .toArray()
       .some((r) => GRID_WEEKDAYS[$(r).find("td, th").first().text().trim().toUpperCase()] !== undefined),
   );
-  if (!gridEl) return [];
+  if (!gridEl) {
+    assertPageShape(false, "timetable grid", html);
+    return [];
+  }
   const grid = $(gridEl);
   const tbodyRows = grid.find("> tbody > tr");
   const rows = (tbodyRows.length ? tbodyRows : grid.find("tr")).toArray();
@@ -621,13 +640,21 @@ export function parseAcademicCalendar(html: string, calDate: string): CalendarDa
   const [, mon, yr] = calDate.split("-");
   const monthNum = MONTH_NUM[(mon ?? "").toUpperCase()];
   const year = parseInt(yr ?? "", 10);
-  if (!monthNum || !Number.isFinite(year)) return [];
+  // A bad token is a caller bug, not an empty month — fail loud so a
+  // corrupted calendar can never read as "no instructional days".
+  if (!monthNum || !Number.isFinite(year)) {
+    throw new VtopError(
+      "UPSTREAM",
+      `Cannot parse the calendar month token "${calDate}".`,
+      "Expected DD-MMM-YYYY (e.g. 01-DEC-2025) from the month list.",
+    );
+  }
 
   const $ = cheerio.load(html);
   const table = $("table.calendar-table").first().length
     ? $("table.calendar-table").first()
     : $("#list-wrapper table").first();
-  if (!table.length) return [];
+  assertPageShape(table.length > 0, "academic calendar month", html);
 
   const days: CalendarDay[] = [];
   table.find("td").each((_i, td) => {
@@ -909,7 +936,9 @@ export function parseExamSchedule(html: string): ExamSchedule[] {
   const $ = cheerio.load(html);
   const schedules: ExamSchedule[] = [];
 
-  if (html.toLowerCase().includes("not found")) return schedules;
+  // Genuine empty first: VTOP prints "No Records/Found" phrasings. A bare
+  // "not found" substring matched course titles and boilerplate — never that.
+  if (RECOGNISED_EMPTY.test(html)) return schedules;
 
   // Walk rows. The header row is the first one with a "Slot" cell (Bhopal puts a
   // "General (Semester)" row above it); single-cell rows are exam-type titles
@@ -919,7 +948,10 @@ export function parseExamSchedule(html: string): ExamSchedule[] {
   const headerAt = rows.findIndex((r) =>
     $(r).children("td,th").toArray().some((c) => text(c).toLowerCase() === "slot"),
   );
-  if (headerAt < 0) return schedules;
+  if (headerAt < 0) {
+    assertPageShape(false, "exam schedule", html);
+    return schedules;
+  }
 
   const headings = $(rows[headerAt])
     .children("td,th")
