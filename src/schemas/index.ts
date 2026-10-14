@@ -159,3 +159,26 @@ export const ApplyLeaveSchema = z.object({
         "previewing invalidates it — re-run the preview.",
     ),
 });
+
+export const CancelLeaveSchema = z.object({
+  leaveId: z
+    .string()
+    .describe("The leave id to withdraw, e.g. 'L9000001' (see get_leave_status)."),
+  confirm: z
+    .boolean()
+    .optional()
+    .describe(
+      "Leave this unset/false for the first call: nothing is withdrawn, and you " +
+        "get back the leave's current status plus a previewToken. Re-call with " +
+        "confirm=true and the SAME leaveId and token to actually withdraw. " +
+        "Never set confirm=true on the first call.",
+    ),
+  previewToken: z
+    .string()
+    .optional()
+    .describe(
+      "The token returned by the preview call. Required with confirm=true. It is " +
+        "bound to this exact leave id and caller, so a different id or a forged " +
+        "token invalidates it — re-run the preview.",
+    ),
+});

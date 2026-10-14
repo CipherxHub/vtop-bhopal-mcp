@@ -289,7 +289,7 @@ try {
     assert.ok(sessionId, "no mcp-session-id header on initialize");
   });
 
-  await check("tools/list exposes all 29 tools with correct write hints", async () => {
+  await check("tools/list exposes all 33 tools with correct write hints", async () => {
     await fetch(`${multi.base}/mcp/${token}`, {
       method: "POST",
       headers: mcpHeaders(sessionId),
@@ -305,16 +305,17 @@ try {
       result: { tools: { name: string; annotations?: { readOnlyHint?: boolean } }[] };
     };
     const tools = body.result.tools;
-    assert.equal(tools.length, 29, `expected 29 tools, got ${tools.length}`);
+    assert.equal(tools.length, 33, `expected 33 tools, got ${tools.length}`);
 
     const nonReadOnly = tools.filter((t) => t.annotations?.readOnlyHint === false).map((t) => t.name);
-    // Four, not one. apply_leave submits a real leave application. get_captcha,
+    // Five, not one. apply_leave submits a real leave application and
+    // cancel_leave withdraws one. get_captcha,
     // login and logout all mutate server-side session state (arming the prelogin
     // session, establishing it, clearing it), so none of them is read-only even
     // though none of them touches a grade.
     assert.deepEqual(
       nonReadOnly.sort(),
-      ["apply_leave", "get_captcha", "login", "logout"],
+      ["apply_leave", "cancel_leave", "get_captcha", "login", "logout"],
       "readOnlyHint:false must mark exactly the state-changing tools",
     );
 

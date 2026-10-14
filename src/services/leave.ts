@@ -390,19 +390,20 @@ function sweepPreviewNonces(now: number): void {
   }
 }
 
-/** Issue a single-use expiring token binding this exact request and caller. */
-export function issuePreviewToken(req: LeaveRequest, callerKey: string): string {
+/** Issue a single-use expiring token binding an opaque digest and caller. */
+function issueSignedToken(digest: string, callerKey: string): string {
   const nonce = randomBytes(16).toString("hex");
   const exp = Date.now() + PREVIEW_TTL_MS;
   const mac = createHmac("sha256", previewKey())
-    .update(`${nonce}.${exp}.${callerKey}.${fieldDigest(req)}`)
+    .update(`${nonce}.${exp}.${callerKey}.${digest}`)
     .digest("base64url");
   return `${nonce}.${exp}.${mac}`;
 }
 
-/** Verify a preview token against the request it must confirm. Null = reject. */
-export function verifyPreviewToken(
-  req: LeaveRequest,
+/** Verify a token issued by issueSignedToken. Messages stay identical across
+ *  handshake kinds so callers and tests pin one vocabulary. */
+function verifySignedToken(
+  digest: string,
   token: string,
   callerKey: string,
 ): { ok: true } | { ok: false; reason: string } {
@@ -422,7 +423,7 @@ export function verifyPreviewToken(
     return { ok: false, reason: "preview token already used — preview again for a fresh one" };
   }
   const expected = createHmac("sha256", previewKey())
-    .update(`${nonce}.${exp}.${callerKey}.${fieldDigest(req)}`)
+    .update(`${nonce}.${exp}.${callerKey}.${digest}`)
     .digest("base64url");
   const a = Buffer.from(mac, "utf8");
   const b = Buffer.from(expected, "utf8");
@@ -431,6 +432,41 @@ export function verifyPreviewToken(
   }
   usedPreviewNonces.set(nonce, exp);
   return { ok: true };
+}
+
+/** Issue a single-use expiring token binding this exact request and caller. */
+export function issuePreviewToken(req: LeaveRequest, callerKey: string): string {
+  return issueSignedToken(fieldDigest(req), callerKey);
+}
+
+/** Verify a preview token against the request it must confirm. Null = reject. */
+export function verifyPreviewToken(
+  req: LeaveRequest,
+  token: string,
+  callerKey: string,
+): { ok: true } | { ok: false; reason: string } {
+  return verifySignedToken(fieldDigest(req), token, callerKey);
+}
+
+/** Digest binding a leave-cancellation handshake to one leave id. Scoped with
+ *  a "cancel" domain separator so an apply token can never verify as a cancel
+ *  token and vice versa. */
+function cancelDigest(leaveId: string): string {
+  return createHash("sha256").update(`cancel ${leaveId.trim().toUpperCase()}`, "utf8").digest("hex");
+}
+
+/** Issue a single-use expiring token binding this leave cancellation. */
+export function issueCancelToken(leaveId: string, callerKey: string): string {
+  return issueSignedToken(cancelDigest(leaveId), callerKey);
+}
+
+/** Verify a cancel token against the leave id it must cancel. */
+export function verifyCancelToken(
+  leaveId: string,
+  token: string,
+  callerKey: string,
+): { ok: true } | { ok: false; reason: string } {
+  return verifySignedToken(cancelDigest(leaveId), token, callerKey);
 }
 
 // --- exam parsing and overlap ----------------------------------------------

@@ -42,6 +42,7 @@ const EXPECTED_TOOLS = [
   "get_leave_types",
   "get_leave_status",
   "apply_leave",
+  "cancel_leave",
   "get_leave_type_rules",
   "get_leave_history",
   "get_student_profile",
@@ -63,6 +64,7 @@ const EXPECTED_TOOLS = [
  */
 const WRITE_TOOLS: Record<string, { readOnlyHint: boolean }> = {
   apply_leave: { readOnlyHint: false },
+  cancel_leave: { readOnlyHint: false },
 };
 
 const SERVER_PATH = path.resolve(process.cwd(), "dist", "index.js");

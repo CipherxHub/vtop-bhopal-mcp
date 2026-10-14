@@ -1030,6 +1030,88 @@ export function parseLeaveRecords(html: string): LeaveRecord[] {
   return out;
 }
 
+/** A withdraw affordance VTOP renders for one leave row, if any. */
+export interface LeaveCancelControl {
+  leaveId: string;
+  /** "href": plain link with query params. "onclick": JS call with args. */
+  kind: "href" | "onclick";
+  /** Link path or JS function name. */
+  action: string;
+  /** Query params (href) or positional args as arg0..argN (onclick). */
+  params: Record<string, string>;
+}
+
+/**
+ * Withdraw controls on the leave-status view. VTOP publishes no documented
+ * cancel endpoint — when a row carries a cancel/withdraw link or button, its
+ * target is read at runtime instead of guessed. Rows without one are not
+ * cancellable through this path.
+ */
+export function parseLeaveCancelControls(html: string): LeaveCancelControl[] {
+  const $ = cheerio.load(html);
+  const out: LeaveCancelControl[] = [];
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const text = (el: unknown) => clean($(el as never).text());
+
+  const rows = $("tr").toArray();
+  let head: string[] = [];
+  for (const r of rows) {
+    const cells = $(r).children("td,th").toArray();
+    if (cells.length < 3) continue;
+    const labels = cells.map((c) => text(c).toLowerCase());
+    if (labels.some((l) => l.includes("leave id")) && labels.some((l) => l.includes("status"))) {
+      head = labels;
+      break;
+    }
+  }
+  if (head.length === 0) return out;
+  const idIdx = head.findIndex((h) => h.includes("leave id"));
+
+  for (const r of rows) {
+    const cells = $(r).children("td").toArray();
+    if (cells.length < 3) continue;
+    const values = cells.map((c) => text(c));
+    if (values.every((v) => v === "")) continue;
+    const leaveId = idIdx >= 0 && values[idIdx] !== undefined ? values[idIdx] : "";
+    if (!/^[A-Za-z]\d{3,}$/.test(leaveId)) continue;
+
+    const spots = $(r).find("a, button, input[type=button], input[type=submit]").toArray();
+    for (const el of spots) {
+      const $el = $(el as never);
+      const label = clean(
+        `${$el.text()} ${$el.attr("value") ?? ""} ${$el.attr("title") ?? ""}`
+      );
+      const href = $el.attr("href") ?? "";
+      const onclick = $el.attr("onclick") ?? "";
+      if (
+        !/cancel|withdraw/i.test(label) &&
+        !/cancel|withdraw/i.test(href) &&
+        !/cancel|withdraw/i.test(onclick)
+      ) {
+        continue;
+      }
+      if (href && !href.startsWith("javascript:")) {
+        const [action, qs] = href.split("?", 2);
+        const params: Record<string, string> = {};
+        if (qs) {
+          for (const [k, v] of new URLSearchParams(qs)) params[k] = v;
+        }
+        out.push({ leaveId, kind: "href", action, params });
+      } else {
+        const fn = (onclick.match(/([A-Za-z_$][\w$]*)\s*\(/) ?? [])[1] ?? "";
+        const args = [...onclick.matchAll(/['"]([^'"]*)['"]/g)].map((m) => m[1]);
+        const params: Record<string, string> = {};
+        args.forEach((a, i) => {
+          params[`arg${i}`] = a;
+        });
+        out.push({ leaveId, kind: "onclick", action: fn, params });
+      }
+    }
+  }
+
+  return out;
+}
+
 export function parseExamSchedule(html: string): ExamSchedule[] {
   const $ = cheerio.load(html);
   const schedules: ExamSchedule[] = [];

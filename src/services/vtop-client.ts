@@ -18,6 +18,7 @@ import {
   parseCalendarMonths,
   parseAcademicCalendar,
   hasAttendanceDetailTable,
+  parseLeaveCancelControls,
   calDateMonthKey,
 } from "./vtop-parser.js";
 import type { CalendarDay } from "./attendance-calc.js";
@@ -824,6 +825,43 @@ export class VtopClient {
       control: LEAVE_CONTROL.submit,
       x: new Date().toUTCString(),
     });
+  }
+
+  /**
+   * WITHDRAW a leave application. This writes to VTOP.
+   *
+   * VTOP publishes no documented cancel endpoint, so the withdraw target is
+   * read at runtime from the status view (parseLeaveCancelControls) instead
+   * of guessed. Only plain-link controls are followed; script-call controls
+   * fail loud with their function name and args, so a live sighting can wire
+   * them without guessing. Deliberately separate from the getters.
+   */
+  async cancelLeaveApplication(leaveId: string): Promise<string> {
+    const wanted = leaveId.trim().toUpperCase();
+    const controls = parseLeaveCancelControls(await this.getLeaveStatusHtml());
+    const ctl = controls.find((c) => c.leaveId.toUpperCase() === wanted);
+    if (!ctl) {
+      throw new VtopError(
+        "UPSTREAM",
+        `VTOP published no withdraw control for leave ${leaveId.trim()}.`,
+        "Only rows carrying a cancel/withdraw link can be withdrawn through this path. " +
+          "An approved or already-closed leave typically offers none.",
+      );
+    }
+    if (ctl.kind !== "href") {
+      throw new VtopError(
+        "UPSTREAM",
+        `Withdraw control for leave ${leaveId.trim()} is a script call (${ctl.action || "unknown"}), not a link.`,
+        `Args seen: ${JSON.stringify(ctl.params)}. Report this shape so the control can be wired without guessing.`,
+      );
+    }
+    const url = new URL(ctl.action || ENDPOINTS.leaveStatus, `${this.baseUrl}/`);
+    for (const [k, v] of Object.entries(ctl.params)) url.searchParams.append(k, v);
+    const path = url.pathname.startsWith("/vtop/")
+      ? url.pathname.slice("/vtop".length)
+      : url.pathname;
+    const res = await this.dataClient().get(path + url.search);
+    return res.data as string;
   }
 
   /**

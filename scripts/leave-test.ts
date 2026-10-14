@@ -19,12 +19,14 @@ import {
   examClockToMinutes,
   findClassOverlaps,
   findExamOverlaps,
+  issueCancelToken,
   issuePreviewToken,
   leaveFingerprint,
   minutesOfDay,
   normaliseExamDate,
   normaliseTime,
   validateLeave,
+  verifyCancelToken,
   verifyPreviewToken,
   type LeaveRequest,
 } from "../src/services/leave.js";
@@ -288,6 +290,21 @@ check("a forged preview token is rejected", () => {
   const r = req();
   assert.equal(verifyPreviewToken(r, "forged", PREVIEW_OWNER).ok, false);
   assert.equal(verifyPreviewToken(r, leaveFingerprint(r), PREVIEW_OWNER).ok, false);
+});
+
+// --- server-signed cancel tokens -------------------------------------------
+check("an issued cancel token verifies for its leave id only", () => {
+  // Fresh token per assertion: verifies are single-use.
+  assert.deepEqual(verifyCancelToken("L9000001", issueCancelToken("L9000001", PREVIEW_OWNER), PREVIEW_OWNER), { ok: true });
+  assert.deepEqual(verifyCancelToken("l9000001", issueCancelToken("L9000001", PREVIEW_OWNER), PREVIEW_OWNER), { ok: true }, "ids match case-insensitively");
+  assert.equal(verifyCancelToken("L9000002", issueCancelToken("L9000001", PREVIEW_OWNER), PREVIEW_OWNER).ok, false, "another id must not verify");
+  assert.equal(verifyCancelToken("L9000001", issueCancelToken("L9000001", PREVIEW_OWNER), "test-owner-b").ok, false, "another caller must not verify");
+});
+
+check("an apply token never verifies as a cancel token", () => {
+  // Domain separation: same caller, same process, different handshake.
+  const tok = issuePreviewToken(req(), PREVIEW_OWNER);
+  assert.equal(verifyCancelToken("L9000001", tok, PREVIEW_OWNER).ok, false);
 });
 
 // --- class overlap ---------------------------------------------------------
