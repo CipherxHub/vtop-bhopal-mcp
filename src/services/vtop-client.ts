@@ -13,7 +13,7 @@ import {
 import { VtopError, isNotAuthenticated, classify } from "./errors.js";
 import { upscaleCaptcha, describeCaptchaSize } from "./captcha-image.js";
 import { TtlCache, liveCacheTtlMs } from "./cache.js";
-import { applySystemCATrust, vtopCaBundle } from "./tls.js";
+import { applySystemCATrust, isTruthy, vtopCaBundle } from "./tls.js";
 import {
   parseCalendarMonths,
   parseAcademicCalendar,
@@ -271,20 +271,30 @@ export class VtopClient {
     // verification ON; see tls.ts). Scoped to this agent — other connections
     // (Redis, etc.) are untouched.
     const ca = vtopCaBundle();
+    // Last-resort escape hatch for TLS-inspecting proxies whose CA is nowhere
+    // in any trust store. Scoped to the VTOP agent only — unlike the old
+    // NODE_TLS_REJECT_UNAUTHORIZED kill-switch, Redis and every other host
+    // stay verified. Trusted networks only.
+    const insecure = isTruthy(process.env.VTOP_INSECURE_TLS) ? { rejectUnauthorized: false } : {};
+    if (isTruthy(process.env.VTOP_INSECURE_TLS)) {
+      console.error(
+        "VtopMCP: VTOP_INSECURE_TLS is set — TLS verification is disabled for VTOP connections only.",
+      );
+    }
     if (proxyUrl) {
       // Proxy path: a single agent both tunnels through the proxy and syncs the
       // cookie jar. proxy:false stops axios's own env-proxy logic from
       // double-tunneling.
       return axios.create({
         ...config,
-        httpsAgent: new HttpsProxyCookieAgent(proxyUrl, { cookies: { jar }, ca }),
+        httpsAgent: new HttpsProxyCookieAgent(proxyUrl, { cookies: { jar }, ca, ...insecure }),
         proxy: false,
       });
     }
     // Direct path: cookie agent handles the jar at the socket level.
     return axios.create({
       ...config,
-      httpsAgent: new HttpsCookieAgent({ cookies: { jar }, ca }),
+      httpsAgent: new HttpsCookieAgent({ cookies: { jar }, ca, ...insecure }),
       proxy: false,
     });
   }
@@ -1037,7 +1047,12 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
 
   /** Full leave history (status + approved past records + gate-pass state). */
   async getLeaveHistoryHtml(): Promise<string> {
-    return this.getInfoPage(ENDPOINTS.leaveHistory);
+    // Same reachability rule as the form/status getters: VTOP answers a
+    // disabled module with HTTP 200 carrying an error modal, which must
+    // raise ENDPOINT_NOT_FOUND — never parse as "no history".
+    const html = await this.getInfoPage(ENDPOINTS.leaveHistory);
+    this.assertLeaveReachable(html, "leave history");
+    return html;
   }
 
   /**
