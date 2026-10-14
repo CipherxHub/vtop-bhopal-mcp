@@ -2,8 +2,61 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "../services/vtop-client.js";
 import { weekdayOf, type CalendarDay } from "../services/attendance-calc.js";
 import { assertIsoMonth } from "../services/dates.js";
-import { CalendarSchema } from "../schemas/index.js";
+import { CalendarSchema, SemesterInputSchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
+
+/** Today in IST, matching the rest of the tools. */
+function istToday(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+export interface TermBounds {
+  firstInstructionalDay: string | null;
+  lastInstructionalDay: string | null;
+  instructionalDaysTotal: number;
+  instructionalDaysRemaining: number;
+  /** True when today is past the last instructional day: no more classes can
+   *  occur, so attendance figures are final (locked), not projectable. */
+  teachingOver: boolean | null;
+}
+
+/** Term bounds derived from the academic calendar. Nulls when unreadable. */
+export async function termBounds(
+  client: VtopClient,
+  semesterId: string,
+  today: string,
+): Promise<TermBounds> {
+  const days = await client.getCalendar(semesterId, "1900-01-01", "2999-12-31");
+  const instructional = days
+    .filter((d) => d.instructional)
+    .map((d) => d.date)
+    .sort();
+  if (instructional.length === 0) {
+    return {
+      firstInstructionalDay: null,
+      lastInstructionalDay: null,
+      instructionalDaysTotal: 0,
+      instructionalDaysRemaining: 0,
+      teachingOver: null,
+    };
+  }
+  const first = instructional[0];
+  const last = instructional[instructional.length - 1];
+  return {
+    firstInstructionalDay: first,
+    lastInstructionalDay: last,
+    instructionalDaysTotal: instructional.length,
+    instructionalDaysRemaining: instructional.filter((d) => d >= today).length,
+    teachingOver: today > last,
+  };
+}
 
 export function registerCalendarTool(server: McpServer, client: VtopClient) {
   mkJsonTool(
@@ -59,6 +112,32 @@ export function registerCalendarTool(server: McpServer, client: VtopClient) {
             }
           : {}),
         days: view,
+      };
+    },
+  );
+}
+
+export function registerSemesterInfoTool(server: McpServer, client: VtopClient) {
+  mkJsonTool(
+    server,
+    "get_semester_info",
+    "Term bounds for a semester: id, name, first/last instructional day from the academic calendar, instructional-day totals, days remaining, and whether teaching is over. When teachingOver is true, no more classes can occur — attendance figures are final (locked), not projectable. Use this to answer 'when does my semester end?' or 'how many teaching days are left?'. Requires login.",
+    SemesterInputSchema.shape,
+    async ({ semesterId }) => {
+      const id = semesterId ?? (await client.getCurrentSemesterId());
+      const name = (await client.getSemesters()).find((s) => s.id === id)?.name ?? null;
+      const today = istToday();
+      const bounds = await termBounds(client, id, today);
+      return {
+        semesterId: id,
+        name,
+        today,
+        ...bounds,
+        ...(bounds.teachingOver === true
+          ? { note: "Teaching is over for this term: attendance figures are final and no further classes can change them." }
+          : bounds.teachingOver === false
+            ? { note: `${bounds.instructionalDaysRemaining} instructional days remain (including today).` }
+            : { note: "Term bounds unreadable from the calendar — neither confirmed nor ruled out." }),
       };
     },
   );

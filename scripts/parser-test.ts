@@ -182,7 +182,7 @@ check("parseAttendanceDetailRefs reads Bhopal's callStudentAttendanceDetailDispl
 });
 check("parseAttendanceDetail picks Bhopal's per-class table, not the summary", () => {
   assert.deepEqual(parseAttendanceDetail(F.ATT_DETAIL_BHOPAL_HTML), {
-    present: 1, absent: 1, onDuty: 1, total: 3, odHours: 2, // one 90-min slot = 2 x 50-min periods
+    present: 1, absent: 1, onDuty: 1, total: 3, other: 0, odHours: 2, // one 90-min slot = 2 x 50-min periods
     odDates: ["25-09-2026"],
   });
 });

@@ -234,6 +234,25 @@ async function main() {
     assert.equal(badDate.isError ?? false, true, "bad date must be an error");
   });
 
+  await check("get_semester_info reports bounds from the calendar", async () => {
+    // Fake calendar: DAY1..DAY2 instructional (both future), one holiday.
+    const r = await callJson(client, "get_semester_info");
+    assert.equal(r.semesterId, "TESTSEM");
+    assert.equal(r.name, "Fall Semester 2025-26");
+    assert.equal(r.firstInstructionalDay, DAY1);
+    assert.equal(r.lastInstructionalDay, DAY2);
+    assert.equal(r.instructionalDaysTotal, 2);
+    assert.equal(r.instructionalDaysRemaining, 2);
+    assert.equal(r.teachingOver, false);
+  });
+  await check("calculate_attendance toTermEnd resolves to the last instructional day", async () => {
+    const r = await callJson(client, "calculate_attendance", { toTermEnd: true });
+    assert.equal(r.untilDate, DAY2);
+    assert.equal(r.resolvedToTermEnd, true);
+    assert.ok(r.courses.length > 0);
+    assert.equal(r.verdict ?? null, null, "term still running: no locked verdict");
+  });
+
   await client.close();
   await server.close();
   console.log(`\n${passed} checks passed.`);

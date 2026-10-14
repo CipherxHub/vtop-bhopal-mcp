@@ -68,6 +68,12 @@ export const CalcAttendanceSchema = z.object({
     .describe(
       "Dates (ISO YYYY-MM-DD) you plan to SKIP — e.g. today. Requires untilDate. For each course the tool reports whether you'd still be safe by the closing date if you skip exactly these days and attend everything else (`plannedBunk`).",
     ),
+  toTermEnd: z
+    .boolean()
+    .optional()
+    .describe(
+      "Project to the last instructional day of the semester (from the academic calendar) instead of passing untilDate yourself. Answers 'how many of my remaining classes must I attend to hold the target?' — holidays and working Saturdays are excluded automatically.",
+    ),
 });
 
 
