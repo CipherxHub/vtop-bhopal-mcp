@@ -53,11 +53,9 @@ const EXPECTED_TOOLS = [
 ].sort();
 // The list above must not contain duplicates: the missing/extra check below
 // is set-insensitive and would pass with a wrong list.
-assert.equal(
-  new Set(EXPECTED_TOOLS).size,
-  EXPECTED_TOOLS.length,
-  "duplicate tool names in EXPECTED_TOOLS",
-);
+if (new Set(EXPECTED_TOOLS).size !== EXPECTED_TOOLS.length) {
+  throw new Error("duplicate tool names in EXPECTED_TOOLS");
+}
 
 /**
  * Tools that WRITE to VTOP. Each must advertise readOnlyHint=false so an MCP
