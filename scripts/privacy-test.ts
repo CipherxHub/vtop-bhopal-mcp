@@ -75,6 +75,8 @@ const files = walk(ROOT).filter((f) => {
 const SYNTHETIC = new Set([
   "L9000001", "L9000002", "L9000003", "L1234567",
   "9000001", // sample proctor staff id
+  "900001", // sample approver staff id in the square-bracket remark shape
+  "21BCE1234", // the designated fake registration number (4-digit sequence shape)
   "00000000-0000-0000-0000-000000000000", // all-zero CSRF placeholder
   // The registration-form placeholder on the landing page. It matches the
   // registration-number rule by design - it has to, or the field would not
@@ -97,7 +99,10 @@ const SYNTHETIC = new Set([
 const FORBIDDEN: { name: string; re: RegExp; why: string; only?: RegExp }[] = [
   {
     name: "VIT Bhopal registration number",
-    re: /\b\d{2}[A-Z]{3}\d{5}\b/g,
+    // 5-digit sequences are current Bhopal ids; 4-digit tails match legacy
+    // and other-campus shapes, so both are guarded. The only values of
+    // either shape that may appear are allowlisted SYNTHETIC fakes.
+    re: /\b\d{2}[A-Z]{3}\d{4,5}\b/g,
     why: "the student's unique identifier - this is the single most identifying string possible",
   },
   {
@@ -107,9 +112,11 @@ const FORBIDDEN: { name: string; re: RegExp; why: string; only?: RegExp }[] = [
   },
   {
     // Capture group 1 is the staff id itself, so the allowlist compares the
-    // identifier rather than the surrounding markup.
+    // identifier rather than the surrounding markup. Live leave history
+    // renders the square-bracket shape (by [ 900001 ] [ NAME]), so both
+    // bracket styles are matched — a real id in either shape must trip.
     name: "staff id in an approver remark",
-    re: /\bby\s*\{\s*(\d{5,8})\s*\}/g,
+    re: /\bby\s*[[{]\s*(\d{5,8})\s*[\]}]/g,
     why: "proctor/staff identifiers are THIRD-PARTY data, not the repo owner's",
   },
   {
@@ -174,6 +181,27 @@ for (const rule of FORBIDDEN) {
     );
   });
 }
+
+check("both approver-id bracket styles trip the staff rule", () => {
+  // Guards against a future edit narrowing the character class back to
+  // curly braces: live history uses square brackets.
+  const rule = FORBIDDEN.find((r) => r.name === "staff id in an approver remark")!;
+  for (const sample of ["by { 9000001 } [ X ]", "by [ 900001 ] [ X ]"]) {
+    const m = [...sample.matchAll(rule.re)];
+    assert.equal(m.length, 1, `${sample} must match`);
+    assert.ok(SYNTHETIC.has(m[0][1]), `${m[0][1]} must be an allowlisted fake`);
+  }
+  const real = [..."REQUEST APPROVED by [ 51234 ] [ REAL NAME ]".matchAll(rule.re)];
+  assert.equal(real.length, 1, "a real bracketed id must trip");
+  assert.ok(!SYNTHETIC.has(real[0][1]), "a real id must not be allowlisted");
+});
+
+check("both reg-number tail lengths trip the rule", () => {
+  const rule = FORBIDDEN.find((r) => r.name === "VIT Bhopal registration number")!;
+  assert.ok("21BCE1234".match(rule.re), "4-digit tail must match");
+  assert.ok("23ABC12345".match(rule.re), "5-digit tail must match");
+  assert.ok(SYNTHETIC.has("21BCE1234") && SYNTHETIC.has("23ABC12345"), "both shapes need allowlisted fakes");
+});
 
 check(".env.example documents the variables without filling them in", () => {
   const example = path.join(ROOT, ".env.example");

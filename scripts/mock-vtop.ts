@@ -26,7 +26,7 @@ import type { AddressInfo } from "node:net";
 const PNG_1x1 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-export const TEST_REGNO = "22BCE1234";
+export const TEST_REGNO = "21BCE1234";
 export const TEST_USER = "22bce1234";
 export const TEST_PASS = "s3cret-password";
 /** The captcha text the mock expects on a successful login. */
