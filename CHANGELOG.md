@@ -6,6 +6,20 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Cancel leave.** cancel_leave withdraws an applied leave behind the same
+  two-step preview/confirm handshake as apply_leave (caller-bound single-use
+  token). The withdraw target is read from the status view at confirm time,
+  never hardcoded; script-call or missing controls refuse loud, and the
+  response must re-parse as cancelled.
+- **Per-class attendance detail.** get_attendance_detail answers "was I
+  present on DATE in COURSE?" (PRESENT/ABSENT/ON DUTY, or NOT POSTED — never
+  absent by default) and lists every posted session per course.
+- **Basket lookup + grouped pending.** get_course_basket finds any catalogue
+  course by code or title fragment with its basket and credits, even untaken;
+  get_pending_subjects groups leftovers byBasket with per-basket counts.
+- **Semester bounds.** get_semester_info reports term bounds, days remaining
+  and a teaching-over flag (figures final/locked); calculate_attendance takes
+  toTermEnd to project to the last instructional day automatically.
 - **Student info tools.** get_student_profile (all five profile sections),
   get_acknowledgments (admission document checklist with what is still owed),
   get_proctor_details (contact record, same data as the profile section).
