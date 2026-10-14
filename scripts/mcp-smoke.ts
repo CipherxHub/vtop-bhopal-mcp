@@ -45,6 +45,7 @@ const EXPECTED_TOOLS = [
   "get_acknowledgments",
   "get_proctor_details",
   "get_curriculum_baskets",
+  "get_course_basket",
   "get_pending_subjects",
   "get_fee_receipts",
 ].sort();
