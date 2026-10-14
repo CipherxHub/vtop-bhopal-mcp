@@ -181,14 +181,22 @@ export function parseAttendance(html: string): AttendanceRecord[] {
     }
     if (!slot && !courseCode) continue;
 
+    // A missing/non-numeric cell ("-", blank) is unknown, never 0. A real 0
+    // means classes happened and none were attended; null means the figures
+    // are not on the page, and every consumer must say so.
+    const num = (s: string): number | null => {
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : null;
+    };
+
     records.push({
       courseCode,
       courseName,
       courseType,
       slot,
-      attended: parseInt(cell(attendedIdx), 10) || 0,
-      total: parseInt(cell(totalIdx), 10) || 0,
-      percentage: parseFloat(cell(percentageIdx)) || 0,
+      attended: num(cell(attendedIdx)),
+      total: num(cell(totalIdx)),
+      percentage: num(cell(percentageIdx)),
     });
   }
 
@@ -737,12 +745,18 @@ export function parseMarks(html: string): MarksRecord[] {
         const c = (idx: number) => (idx >= 0 && idx < ic.length ? $(ic[idx]).text().trim() : "");
         const title = c(titleIdx);
         if (!title) continue;
+        // Blank cells are unpublished, never 0: a missing Scored must read as
+        // "not yet scored", not as a scored zero that depresses totals.
+        const f = (s: string): number | null => {
+          const n = parseFloat(s);
+          return Number.isFinite(n) ? n : null;
+        };
         record.marks.push({
           component: title,
-          maxMarks: parseFloat(c(maxIdx)) || 0,
-          scored: parseFloat(c(scoredIdx)) || 0,
-          maxWeightage: parseFloat(c(maxWeightageIdx)) || 0,
-          weightage: parseFloat(c(weightageIdx)) || 0,
+          maxMarks: f(c(maxIdx)),
+          scored: f(c(scoredIdx)),
+          maxWeightage: f(c(maxWeightageIdx)),
+          weightage: f(c(weightageIdx)),
           average: parseFloat(c(averageIdx)) || null,
           status: c(statusIdx),
         });

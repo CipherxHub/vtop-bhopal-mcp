@@ -28,6 +28,11 @@ Attended / total / percentage per course.
 
 **Args:** `semesterId?`, `refresh?`
 
+> Any of the three numbers may be `null`: VTOP prints `-`/blank for courses
+> with no figures yet, and that reads as *unknown*, never as zero. Courses
+> with `null` counts are reported without projections (`currentPercent: null`,
+> no deadline math) rather than as debarred.
+
 ### `calculate_attendance`
 
 The bunk calculator. How many more classes you can skip, or must attend, to hold
@@ -60,6 +65,10 @@ Internal assessment marks per component — CAT-1, CAT-2, labs, quizzes,
 assignments — with VTOP's own `weightage` column.
 
 **Args:** `semesterId?`, `refresh?`
+
+> A blank cell is unpublished, never zero: `scored`/`weightage` come back
+> `null` with `pending: true`, and bank nothing into `scoredSoFar`. A real
+> scored zero (e.g. an Absent) stays `0` with `pending: false`.
 
 ### `get_internal_totals`
 

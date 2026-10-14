@@ -101,6 +101,22 @@ check("parseAttendance reads attended/total/percentage", () => {
   assert.equal(recs[1].attended, 30);
 });
 
+check("parseAttendance reports dash cells as unknown, never zero", () => {
+  // VTOP prints "-" for courses with no figures yet. Those must come back
+  // null (unknown), not 0/0/0% (debarred with no attendance).
+  const recs = parseAttendance(`<table id="getStudentDetails">
+    <tr><th>Sl.No</th><th>Course Code</th><th>Course Title</th><th>Course Type</th>
+    <th>Slot</th><th>Attended Classes</th><th>Total Classes</th>
+    <th>Attendance Percentage</th><th>Attendance View</th></tr>
+    <tr><td>1</td><td>BTST303L</td><td>Not Started</td><td>Theory Only</td>
+    <td>B1</td><td>-</td><td>-</td><td>-</td><td></td></tr>
+  </table>`);
+  assert.equal(recs.length, 1);
+  assert.equal(recs[0].attended, null);
+  assert.equal(recs[0].total, null);
+  assert.equal(recs[0].percentage, null);
+});
+
 // --- timetable grid ---
 check("parseTimetableGrid parses slot/course/venue/time", () => {
   const sessions = parseTimetableGrid(F.TIMETABLE_HTML);

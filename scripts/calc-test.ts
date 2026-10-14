@@ -80,6 +80,14 @@ check("total === 0 -> no classes yet", () => {
   assert.equal(p.bunkBuffer, 0);
   assert.equal(p.classesToRecover, null);
 });
+check("null counts -> unknown, never projected from zero", () => {
+  const rec: AttendanceRecord = { courseCode: "X", courseName: "X", courseType: "T", slot: "A1", attended: null, total: null, percentage: null };
+  const p = projectCourse(rec);
+  assert.equal(p.currentPercent, null);
+  assert.equal(p.bunkBuffer, 0);
+  assert.equal(p.classesToRecover, null);
+  assert.match(p.advice, /no attendance figures/);
+});
 check("targetPercent 100 -> unreachable with strict >", () => {
   assert.equal(classesToRecover(40, 50, 100), null);
   assert.equal(classesToRecover(50, 50, 100), null); // can't be strictly above 100%

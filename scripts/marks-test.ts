@@ -35,10 +35,10 @@ function check(name: string, fn: () => void) {
 
 const c = (
   component: string,
-  maxMarks: number,
-  scored: number,
-  maxWeightage: number,
-  weightage: number,
+  maxMarks: number | null,
+  scored: number | null,
+  maxWeightage: number | null,
+  weightage: number | null,
   status = "Present",
 ) => ({ component, maxMarks, scored, maxWeightage, weightage, average: null as number | null, status });
 
@@ -240,6 +240,17 @@ check("an ABSENT component is a real zero, not pending", () => {
 check("a listed but ungraded component is flagged pending", () => {
   const t = courseTotals(rec("Y", "LTM", [c("FAT", 100, 0, 30, 0, "-")]));
   assert.equal(t.components[0].pending, true);
+});
+
+check("a blank (unpublished) component scores null, stays pending, banks nothing", () => {
+  // The parser emits null for blank cells; totals must treat them as
+  // unpublished — visible as pending with no banked marks, never as a
+  // scored zero.
+  const t = courseTotals(rec("Y", "LTM", [c("FAT", 100, null, 30, null, "-")]));
+  assert.equal(t.components[0].scored, null);
+  assert.equal(t.components[0].weightage, null);
+  assert.equal(t.components[0].pending, true);
+  assert.equal(t.scoredSoFar, 0);
 });
 
 check("VTOP's 'Assesment' misspelling still buckets correctly", () => {
