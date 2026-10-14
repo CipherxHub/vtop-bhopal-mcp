@@ -39,6 +39,22 @@ const CALENDAR: CalendarDay[] = [
 ];
 
 // --- fake VtopClient: returns fixtures, no network ---------------------------
+let statusCalls = 0;
+let formCalls = 0;
+const STATUS_WITH_CANCEL = `<table>
+  <tr><th>Leave Id</th><th>Visit Place</th><th>Reason</th><th>Leave Type</th>
+  <th>From</th><th>To</th><th>Status</th><th>Remarks</th><th>Action</th></tr>
+  <tr><td>L9000001</td><td>Bhopal</td><td>Family function.</td><td>DAY OUTING</td>
+  <td>07-OCT-2026 12:29</td><td>07-OCT-2026 18:30</td><td>PROCTOR APPROVAL PENDING</td>
+  <td></td><td><a href="hostels/student/leave/4?control=cancel&leaveId=L9000001">Cancel</a></td></tr>
+  <tr><td>L9000002</td><td>Sehore</td><td>Medical check-up.</td><td>SPECIAL OUTING</td>
+  <td>08-OCT-2026 09:00</td><td>08-OCT-2026 18:00</td><td>REQUEST APPROVED</td><td></td><td></td></tr>
+</table>`;
+const STATUS_CANCELLED = (id: string) => `<table>
+  <tr><th>Leave Id</th><th>Status</th><th>Remarks</th></tr>
+  <tr><td>${id}</td><td>CANCELLED</td><td></td></tr>
+</table>`;
+
 const fakeClient = {
   async getCurrentSemesterId(): Promise<string> {
     return "TESTSEM";
@@ -66,8 +82,22 @@ const fakeClient = {
   async getAttendanceHtml(): Promise<string> {
     return F.ATT_MAIN_HTML;
   },
+  async getAttendanceDetailHtml(): Promise<string> {
+    return F.ATT_DETAIL_HTML;
+  },
+  async getLeaveStatusHtml(): Promise<string> {
+    statusCalls++;
+    return STATUS_WITH_CANCEL;
+  },
+  async cancelLeaveApplication(leaveId: string): Promise<string> {
+    return STATUS_CANCELLED(leaveId);
+  },
   async getExamScheduleHtml(): Promise<string> {
     return F.EXAM_SCHEDULE_BHOPAL_HTML;
+  },
+  async getLeaveFormHtml(): Promise<string> {
+    formCalls++;
+    return `<select id="leaveCode"><option value="">-Select-</option><option value="OG1">DAY OUTING</option></select>`;
   },
   async fetchPage(endpoint: string): Promise<string> {
     switch (endpoint) {
@@ -210,6 +240,122 @@ async function main() {
     assert.match(res.content.find((c) => c.type === "text")?.text ?? "", /YYYY-MM-DD/);
   });
 
+
+  await check("get_attendance_detail answers present/absent/not-posted per day", async () => {
+    // ATT_DETAIL_HTML rows: 01-Jan-2026 Present, 03-Jan-2026 On Duty, ...
+    const present = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L", date: "2026-01-01" });
+    assert.equal(present.verdict, "PRESENT");
+    const missing = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L", date: "2026-02-02" });
+    assert.equal(missing.verdict, "NOT POSTED");
+    const od = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L", date: "2026-01-03" });
+    assert.equal(od.verdict, "ON DUTY");
+    const ab = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L", date: "2026-01-07" });
+    assert.equal(ab.verdict, "ABSENT");
+    const all = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L" });
+    assert.ok(all.count >= 4 && all.rows.length === all.count);
+  });
+  await check("get_attendance_detail rejects unknown courses and bad dates", async () => {
+    const noRef = (await client.callTool({ name: "get_attendance_detail", arguments: { courseCode: "NOPE9999" } })) as {
+      isError?: boolean;
+    };
+    assert.equal(noRef.isError ?? false, true, "unknown course must be an error");
+    const badDate = (await client.callTool({ name: "get_attendance_detail", arguments: { courseCode: "BTST101L", date: "yesterday" } })) as {
+      isError?: boolean;
+    };
+    assert.equal(badDate.isError ?? false, true, "bad date must be an error");
+  });
+
+  await check("get_semester_info reports bounds from the calendar", async () => {
+    // Fake calendar: DAY1..DAY2 instructional (both future), one holiday.
+    const r = await callJson(client, "get_semester_info");
+    assert.equal(r.semesterId, "TESTSEM");
+    assert.equal(r.name, "Fall Semester 2025-26");
+    assert.equal(r.firstInstructionalDay, DAY1);
+    assert.equal(r.lastInstructionalDay, DAY2);
+    assert.equal(r.instructionalDaysTotal, 2);
+    assert.equal(r.instructionalDaysRemaining, 2);
+    assert.equal(r.teachingOver, false);
+  });
+  await check("calculate_attendance toTermEnd resolves to the last instructional day", async () => {
+    const r = await callJson(client, "calculate_attendance", { toTermEnd: true });
+    assert.equal(r.untilDate, DAY2);
+    assert.equal(r.resolvedToTermEnd, true);
+    assert.ok(r.courses.length > 0);
+    assert.equal(r.verdict ?? null, null, "term still running: no locked verdict");
+  });
+  await check("teaching-over term reports locked figures, no projection", async () => {
+    // Calendar with its only instructional day in the past: the term is over.
+    const pastClient = {
+      ...fakeClient,
+      getCalendar: async (): Promise<CalendarDay[]> => [
+        { date: "2020-01-06", instructional: true, dayOrderWeekday: "MON", label: "Working Day" },
+      ],
+    } as unknown as VtopClient;
+    const { server: pastServer } = createServer(undefined, pastClient);
+    const [t2, s2] = InMemoryTransport.createLinkedPair();
+    const c2 = new Client({ name: "tool-test-past", version: "0.0.0" });
+    await Promise.all([pastServer.connect(s2), c2.connect(t2)]);
+    const info = (await c2.callTool({ name: "get_semester_info", arguments: {} })) as any;
+    const infoJson = JSON.parse(info.content.find((c: any) => c.type === "text")?.text ?? "{}");
+    assert.equal(infoJson.teachingOver, true);
+    assert.match(infoJson.note ?? "", /final/);
+    const calc = (await c2.callTool({ name: "calculate_attendance", arguments: { toTermEnd: true } })) as any;
+    const calcJson = JSON.parse(calc.content.find((c: any) => c.type === "text")?.text ?? "{}");
+    assert.ok(calcJson.verdict, "locked term must produce a final verdict");
+    assert.equal(calcJson.termBounds.teachingOver, true);
+    await c2.close();
+    await pastServer.close();
+  });
+
+  await check("cancel_leave previews with status + withdrawability, then withdraws", async () => {
+    const preview = await callJson(client, "cancel_leave", { leaveId: "L9000001" });
+    assert.match(preview.mode, /PREVIEW/);
+    assert.equal(preview.leave.status, "PROCTOR APPROVAL PENDING");
+    assert.equal(preview.withdrawControlPublished, true);
+    assert.ok(preview.previewToken, "preview mints a token");
+    const done = await callJson(client, "cancel_leave", {
+      leaveId: "L9000001",
+      confirm: true,
+      previewToken: preview.previewToken,
+    });
+    assert.equal(done.mode, "WITHDRAWN");
+  });
+  await check("cancel_leave rejects unknown ids and bogus tokens without VTOP touch", async () => {
+    const unknown = await callJson(client, "cancel_leave", { leaveId: "L0000000" });
+    assert.match(unknown.mode, /REJECTED/);
+    const before = statusCalls;
+    const bad = await callJson(client, "cancel_leave", {
+      leaveId: "L9000001",
+      confirm: true,
+      previewToken: "garbage",
+    });
+    assert.match(bad.mode, /CONFIRM REJECTED/);
+    assert.equal(statusCalls, before, "bogus confirm must cost zero status fetches");
+  });
+
+  await check("apply_leave bogus confirm costs zero VTOP reads", async () => {
+    // The confirm handler must verify the token before the form fetch,
+    // semester lookup, calendar, timetable and exams. A forged token that
+    // still triggers reads is a DoS amplifier in exposed single-user mode.
+    const before = formCalls;
+    const badApply = (await client.callTool({
+      name: "apply_leave",
+      arguments: {
+        leaveCode: "OG1",
+        visitingPlace: "Bhopal",
+        leaveFromDate: "2026-10-20",
+        fromTime: "09:00",
+        leaveToDate: "2026-10-20",
+        toTime: "18:00",
+        reason: "Family function in Bhopal.",
+        confirm: true,
+        previewToken: "garbage",
+      },
+    })) as { content: { type: string; text?: string }[] };
+    const text = badApply.content.find((c) => c.type === "text")?.text ?? "";
+    assert.match(JSON.parse(text).mode, /CONFIRM REJECTED/);
+    assert.equal(formCalls, before, "bogus confirm must not read the form");
+  });
 
   await client.close();
   await server.close();

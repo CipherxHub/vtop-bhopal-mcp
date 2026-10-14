@@ -17,6 +17,8 @@ import { applySystemCATrust, isTruthy, vtopCaBundle } from "./tls.js";
 import {
   parseCalendarMonths,
   parseAcademicCalendar,
+  hasAttendanceDetailTable,
+  parseLeaveCancelControls,
   calDateMonthKey,
 } from "./vtop-parser.js";
 import type { CalendarDay } from "./attendance-calc.js";
@@ -826,6 +828,43 @@ export class VtopClient {
   }
 
   /**
+   * WITHDRAW a leave application. This writes to VTOP.
+   *
+   * VTOP publishes no documented cancel endpoint, so the withdraw target is
+   * read at runtime from the status view (parseLeaveCancelControls) instead
+   * of guessed. Only plain-link controls are followed; script-call controls
+   * fail loud with their function name and args, so a live sighting can wire
+   * them without guessing. Deliberately separate from the getters.
+   */
+  async cancelLeaveApplication(leaveId: string): Promise<string> {
+    const wanted = leaveId.trim().toUpperCase();
+    const controls = parseLeaveCancelControls(await this.getLeaveStatusHtml());
+    const ctl = controls.find((c) => c.leaveId.toUpperCase() === wanted);
+    if (!ctl) {
+      throw new VtopError(
+        "UPSTREAM",
+        `VTOP published no withdraw control for leave ${leaveId.trim()}.`,
+        "Only rows carrying a cancel/withdraw link can be withdrawn through this path. " +
+          "An approved or already-closed leave typically offers none.",
+      );
+    }
+    if (ctl.kind !== "href") {
+      throw new VtopError(
+        "UPSTREAM",
+        `Withdraw control for leave ${leaveId.trim()} is a script call (${ctl.action || "unknown"}), not a link.`,
+        `Args seen: ${JSON.stringify(ctl.params)}. Report this shape so the control can be wired without guessing.`,
+      );
+    }
+    const url = new URL(ctl.action || ENDPOINTS.leaveStatus, `${this.baseUrl}/`);
+    for (const [k, v] of Object.entries(ctl.params)) url.searchParams.append(k, v);
+    const path = url.pathname.startsWith("/vtop/")
+      ? url.pathname.slice("/vtop".length)
+      : url.pathname;
+    const res = await this.dataClient().get(path + url.search);
+    return res.data as string;
+  }
+
+  /**
    * Fetch the constraints VTOP publishes for one leave type.
    *
    * Reproduces what the leaveCode dropdown does in the browser: selecting a
@@ -898,6 +937,31 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
   /** Attendance page for a semester, TTL-cached (default 60s). */
   getAttendanceHtml(semesterId: string, refresh = false): Promise<string> {
     return this.fetchCachedPage(`attendance:${semesterId}`, ENDPOINTS.attendance, { semesterSubId: semesterId }, refresh);
+  }
+
+  /**
+   * Per-class detail for one course (processViewAttendanceDetail). The Bhopal
+   * request shape (semesterSubId/registerNumber/courseId/courseType, from the
+   * row's callStudentAttendanceDetailDisplay handle) was reconstructed from
+   * page markup and is UNVERIFIED against a live request — so the response is
+   * validated: no detail table means UPSTREAM, never an empty success. First
+   * live use that throws here means the payload shape needs correcting, not
+   * that the course has no detail.
+   */
+  async getAttendanceDetailHtml(params: Record<string, string>): Promise<string> {
+    this.ensureAuthenticated();
+    const html = await this.postWithAuth(ENDPOINTS.attendanceDetail, {
+      ...params,
+      x: new Date().toUTCString(),
+    });
+    if (!hasAttendanceDetailTable(html)) {
+      throw new VtopError(
+        "UPSTREAM",
+        "VTOP returned no per-class detail table for these parameters.",
+        "The detail request shape may be wrong for this campus, or the course has no detail view. Not treated as empty attendance.",
+      );
+    }
+    return html;
   }
 
   /** Exam schedule for a semester, TTL-cached (default 60s). */

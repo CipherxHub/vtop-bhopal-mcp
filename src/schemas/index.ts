@@ -68,6 +68,12 @@ export const CalcAttendanceSchema = z.object({
     .describe(
       "Dates (ISO YYYY-MM-DD) you plan to SKIP — e.g. today. Requires untilDate. For each course the tool reports whether you'd still be safe by the closing date if you skip exactly these days and attend everything else (`plannedBunk`).",
     ),
+  toTermEnd: z
+    .boolean()
+    .optional()
+    .describe(
+      "Project to the last instructional day of the semester (from the academic calendar) instead of passing untilDate yourself. Answers 'how many of my remaining classes must I attend to hold the target?' — holidays and working Saturdays are excluded automatically.",
+    ),
 });
 
 
@@ -151,5 +157,28 @@ export const ApplyLeaveSchema = z.object({
       "The token returned by the preview call. Required with confirm=true. It is " +
         "checked against these exact field values, so editing any field after " +
         "previewing invalidates it — re-run the preview.",
+    ),
+});
+
+export const CancelLeaveSchema = z.object({
+  leaveId: z
+    .string()
+    .describe("The leave id to withdraw, e.g. 'L9000001' (see get_leave_status)."),
+  confirm: z
+    .boolean()
+    .optional()
+    .describe(
+      "Leave this unset/false for the first call: nothing is withdrawn, and you " +
+        "get back the leave's current status plus a previewToken. Re-call with " +
+        "confirm=true and the SAME leaveId and token to actually withdraw. " +
+        "Never set confirm=true on the first call.",
+    ),
+  previewToken: z
+    .string()
+    .optional()
+    .describe(
+      "The token returned by the preview call. Required with confirm=true. It is " +
+        "bound to this exact leave id and caller, so a different id or a forged " +
+        "token invalidates it — re-run the preview.",
     ),
 });

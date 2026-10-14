@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "./services/vtop-client.js";
 import type { Credentials } from "./types/index.js";
 import { registerAuthTools } from "./tools/auth.js";
-import { registerAttendanceTool } from "./tools/attendance.js";
+import { registerAttendanceTool, registerAttendanceDetailTool } from "./tools/attendance.js";
 import { registerTimetableTool } from "./tools/timetable.js";
 import { registerMarksTool } from "./tools/marks.js";
 import { registerExamScheduleTool } from "./tools/exam-schedule.js";
@@ -12,7 +12,7 @@ import { registerProfileTool } from "./tools/profile.js";
 import { registerCurriculumTool } from "./tools/curriculum.js";
 import { registerAttendanceCalcTool } from "./tools/attendance-calc.js";
 import { registerTodayClassesTool } from "./tools/today.js";
-import { registerCalendarTool } from "./tools/calendar.js";
+import { registerCalendarTool, registerSemesterInfoTool } from "./tools/calendar.js";
 import { registerPassEligibilityTool } from "./tools/pass-eligibility.js";
 import { registerLeaveTools } from "./tools/leave.js";
 import { registerStudentInfoTools } from "./tools/student-info.js";
@@ -44,6 +44,7 @@ export function createServer(
   // credentials decrypted from the connector token (multi-user HTTP mode).
   registerAuthTools(server, client, credentials);
   registerAttendanceTool(server, client);
+  registerAttendanceDetailTool(server, client);
   registerTimetableTool(server, client);
   registerMarksTool(server, client);
   registerExamScheduleTool(server, client);
@@ -53,6 +54,7 @@ export function createServer(
   registerAttendanceCalcTool(server, client);
   registerTodayClassesTool(server, client);
   registerCalendarTool(server, client);
+  registerSemesterInfoTool(server, client);
   registerPassEligibilityTool(server, client);
   registerStudentInfoTools(server, client);
   registerFeesTools(server, client);

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { VtopClient } from "../services/vtop-client.js";
 import {
   parseExamSchedule,
+  parseLeaveCancelControls,
   parseLeaveRecords,
   parseLeaveTypeOptions,
   parseTimetableGrid,
@@ -16,14 +17,16 @@ import {
 import {
   findClassOverlaps,
   findExamOverlaps,
+  issueCancelToken,
   issuePreviewToken,
   normaliseTime,
   validateLeave,
+  verifyCancelToken,
   verifyPreviewToken,
   type ExamOverlapResult,
   type LeaveRequest,
 } from "../services/leave.js";
-import { ApplyLeaveSchema } from "../schemas/index.js";
+import { ApplyLeaveSchema, CancelLeaveSchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
 
 /** Today in IST, matching the rest of the tools. */
@@ -57,9 +60,10 @@ async function classesInWindow(
   const warning: string[] = [];
   try {
     const calendar = await client.getCalendar(semesterId, fromDate, toDate);
-    const instructional = new Set(
-      calendar.filter((d) => d.instructional).map((d) => d.date),
-    );
+    // Keep the whole day object: dayOrderWeekday carries working-Saturday
+    // overrides (a Saturday running Monday's timetable). Matching on natural
+    // weekday alone makes those classes invisible to the overlap check.
+    const instructional = calendar.filter((d) => d.instructional);
     const grid = parseTimetableGrid(await client.getTimetableHtml(semesterId));
     const gridSessions = grid;
 
@@ -68,11 +72,11 @@ async function classesInWindow(
       startTime: string; endTime: string; venue: string;
     }[] = [];
     for (const day of instructional) {
-      const weekday = weekdayOf(day);
+      const weekday = day.dayOrderWeekday ?? weekdayOf(day.date);
       for (const s of gridSessions) {
         if (s.day !== weekday) continue;
         sessions.push({
-          date: day,
+          date: day.date,
           courseCode: s.courseCode,
           courseName: "",
           startTime: s.startTime,
@@ -81,7 +85,7 @@ async function classesInWindow(
         });
       }
     }
-    if (instructional.size === 0) {
+    if (instructional.length === 0) {
       warning.push(
         "The academic calendar listed no instructional days in this window, so no " +
           "classes could be counted. The overlap check is INCOMPLETE.",
@@ -381,7 +385,7 @@ export function registerLeaveTools(
       // Server-signed single-use token (issue #6) binding the exact fields.
       // Only minted on the preview path; a confirm already consumed its token,
       // and handing a fresh one out inside a rejection would let callers chain
-      // confirm retries without re-previewing.
+      // confirm retries without re-previewing. (fix: audit follow-ups — fabricated rows, day-order overlap, cancel hardening, test gating)
       const previewTokenIssued = confirming ? null : issuePreviewToken(request, previewTokenOwner);
 
       const semesterId = await client.getCurrentSemesterId();
@@ -563,6 +567,134 @@ export function registerLeaveTools(
       hints: {
         readOnlyHint: false,
         destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+  );
+
+  // --- write: cancel leave -------------------------------------------------
+  mkJsonTool(
+    server,
+    "cancel_leave",
+    "Withdraw a hostel leave application on VTOP. THIS WRITES TO VTOP, so it is deliberately two-step like apply_leave.\n" +
+      "  Call 1 (preview): pass leaveId with confirm OMITTED or false. Nothing is withdrawn. You get back the leave's current record — type, dates, and approval status exactly as VTOP prints it — plus whether VTOP publishes a withdraw control for it, and a previewToken.\n" +
+      "  Call 2 (withdraw): repeat the SAME leaveId plus confirm=true and the previewToken. The token is bound to this exact leave id and caller.\n" +
+      "Always show the user the preview — including the approval state — and get their agreement before calling with confirm=true. An already-approved leave may no longer offer a withdraw control; the preview says so. Never invent a previewToken or set confirm=true on a first call.\n" +
+      "Requires login.",
+    CancelLeaveSchema.shape,
+    async ({ leaveId, confirm, previewToken }) => {
+      const id = leaveId.trim().toUpperCase();
+      const confirming = confirm === true;
+      // Cheap rejection first: token verification needs only id+token+owner,
+      // no VTOP. A bogus confirm must cost zero upstream requests — the write
+      // itself stays gated below regardless.
+      if (confirming) {
+        if (typeof previewToken !== "string" || !previewToken) {
+          return {
+            leaveId: id,
+            mode: "CONFIRM REJECTED - nothing withdrawn",
+            verdict:
+              "confirm=true needs the previewToken from a preview call. Run cancel_leave " +
+              "without confirm first. Nothing was withdrawn, and no VTOP requests were made.",
+          };
+        }
+        const early = verifyCancelToken(id, previewToken, previewTokenOwner);
+        if (!early.ok) {
+          return {
+            leaveId: id,
+            mode: "CONFIRM REJECTED - nothing withdrawn",
+            verdict: `Invalid preview token (${early.reason}). Nothing was withdrawn - preview again.`,
+          };
+        }
+      }
+      const statusHtml = await client.getLeaveStatusHtml();
+      const records = parseLeaveRecords(statusHtml);
+      const record = records.find((r) => (r.leaveId ?? "").toUpperCase() === id) ?? null;
+      if (!record) {
+        const known = records.map((r) => r.leaveId).filter(Boolean);
+        return {
+          mode: "PREVIEW - REJECTED, nothing withdrawn",
+          leaveId: leaveId.trim(),
+          verdict:
+            `No applied leave with id "${leaveId.trim()}" is on file. Nothing was withdrawn. ` +
+            (known.length ? `Applied ids right now: ${known.join(", ")}.` : "No leave applications are on file at all."),
+        };
+      }
+      const controls = parseLeaveCancelControls(statusHtml);
+      const withdrawable = controls.some((c) => c.leaveId.toUpperCase() === id);
+      const approved = /approv/i.test(record.status) && !/pending|rais/i.test(record.status);
+
+      const preview = {
+        mode: "PREVIEW - nothing has been withdrawn",
+        leave: record,
+        approved,
+        withdrawControlPublished: withdrawable,
+        previewToken: issueCancelToken(id, previewTokenOwner),
+        nextStep:
+          "Show this to the user. If they agree, call cancel_leave again with the IDENTICAL " +
+          "leaveId plus confirm=true and the previewToken from this preview. " +
+          "The token is single-use and expires after 10 minutes.",
+      };
+
+      // --- preview path: never writes ---
+      if (confirm !== true) {
+        return {
+          ...preview,
+          verdict:
+            `Leave ${record.leaveId} (${record.leaveType}, ${record.from} → ${record.to}) is currently "${record.status}". ` +
+            (approved
+              ? "It reads as approved — VTOP may no longer offer a withdraw control for it. "
+              : "It does not read as approved. ") +
+            (withdrawable
+              ? "A withdraw control is published for it."
+              : "No withdraw control is published for it — confirming will report that instead of withdrawing."),
+        };
+      }
+
+      // --- confirm path: writes ---
+      // The token was already verified above, BEFORE any VTOP request, and
+      // verifying it again here would fail on its own single-use nonce.
+      let responseHtml: string;
+      try {
+        responseHtml = await client.cancelLeaveApplication(id);
+      } catch (err) {
+        return {
+          ...preview,
+          previewToken: null,
+          mode: "CONFIRM REJECTED - nothing withdrawn",
+          verdict: err instanceof Error ? err.message : String(err),
+        };
+      }
+      const after = parseLeaveRecords(responseHtml);
+      const afterRecord = after.find((r) => (r.leaveId ?? "").toUpperCase() === id) ?? null;
+      if (afterRecord && /cancel/i.test(afterRecord.status)) {
+        return {
+          mode: "WITHDRAWN",
+          leaveId: record.leaveId,
+          withdrawnAt: new Date().toISOString(),
+          vtopResponse: { leaveRecords: after, message: extractMessage(responseHtml) },
+          nextStep: "Call get_leave_status to confirm the withdrawn state.",
+        };
+      }
+      return {
+        mode: "WITHDRAW UNCLEAR - verify before retrying",
+        leaveId: record.leaveId,
+        submittedAt: new Date().toISOString(),
+        vtopResponse: { leaveRecords: after, message: extractMessage(responseHtml) },
+        verdict:
+          "VTOP did not confirm the withdrawal — the leave does not read as cancelled. " +
+          "Call get_leave_status before previewing again; retrying blindly could double-withdraw nothing or error.",
+      };
+    },
+    {
+      // This tool WRITES — and withdrawing destroys a granted state (a
+      // re-apply starts the proctor cycle over). readOnlyHint=false makes an
+      // MCP client raise a permission prompt; destructiveHint=true keeps
+      // cautious clients from auto-approving it.
+      hints: {
+        readOnlyHint: false,
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: true,
       },

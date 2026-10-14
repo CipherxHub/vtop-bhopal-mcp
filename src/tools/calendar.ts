@@ -1,9 +1,21 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "../services/vtop-client.js";
-import { weekdayOf, type CalendarDay } from "../services/attendance-calc.js";
+import { weekdayOf, termBounds, type CalendarDay } from "../services/attendance-calc.js";
 import { assertIsoMonth } from "../services/dates.js";
-import { CalendarSchema } from "../schemas/index.js";
+import { CalendarSchema, SemesterInputSchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
+
+/** Today in IST, matching the rest of the tools. */
+function istToday(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
 
 export function registerCalendarTool(server: McpServer, client: VtopClient) {
   mkJsonTool(
@@ -59,6 +71,32 @@ export function registerCalendarTool(server: McpServer, client: VtopClient) {
             }
           : {}),
         days: view,
+      };
+    },
+  );
+}
+
+export function registerSemesterInfoTool(server: McpServer, client: VtopClient) {
+  mkJsonTool(
+    server,
+    "get_semester_info",
+    "Term bounds for a semester: id, name, first/last instructional day from the academic calendar, instructional-day totals, days remaining, and whether teaching is over. When teachingOver is true, no more classes can occur — attendance figures are final (locked), not projectable. Use this to answer 'when does my semester end?' or 'how many teaching days are left?'. Requires login.",
+    SemesterInputSchema.shape,
+    async ({ semesterId }) => {
+      const id = semesterId ?? (await client.getCurrentSemesterId());
+      const name = (await client.getSemesters()).find((s) => s.id === id)?.name ?? null;
+      const today = istToday();
+      const bounds = await termBounds(client.getCalendar.bind(client), id, today);
+      return {
+        semesterId: id,
+        name,
+        today,
+        ...bounds,
+        ...(bounds.teachingOver === true
+          ? { note: "Teaching is over for this term: attendance figures are final and no further classes can change them." }
+          : bounds.teachingOver === false
+            ? { note: `${bounds.instructionalDaysRemaining} instructional days remain (including today).` }
+            : { note: "Term bounds unreadable from the calendar — neither confirmed nor ruled out." }),
       };
     },
   );

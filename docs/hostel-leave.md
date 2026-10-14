@@ -45,6 +45,27 @@ in the form that would be sent.
 
 ---
 
+## Withdrawing a leave (`cancel_leave`)
+
+The second (and only other) write. Same two-step shape as applying:
+
+1. **Preview** with the `leaveId`: reports the leave's current record — type,
+   dates, approval status exactly as VTOP prints it — plus whether VTOP
+   publishes a withdraw control for it, and mints a single-use token bound to
+   that leave id and caller. An already-approved leave may offer no control;
+   the preview says so instead of guessing.
+2. **Confirm** with the identical `leaveId` plus `confirm: true` and the token.
+   The row's own withdraw target is read from the status view at confirm time
+   (never a hardcoded endpoint); script-call controls and missing controls
+   refuse loud instead of firing blind. The response is re-parsed and must
+   read as cancelled, otherwise the result is `WITHDRAW UNCLEAR` — check
+   `get_leave_status` before retrying.
+
+Show the user the preview — including the approval state — and get their
+agreement before confirming, exactly as with applying.
+
+---
+
 ## Leave types
 
 Read from VTOP's live dropdown by `get_leave_types`, not hard-coded. As of the

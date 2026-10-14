@@ -4,6 +4,10 @@ dist/
 *.tsbuildinfo
 test-output/
 
+# Knowledge-graph build artifacts (graphify pipeline + codebase-memory cache
+# live under ~/.cache; graphify-out/ is regenerable via the skill).
+graphify-out/
+
 # Diagnostic artifact written by scripts/captcha-debug.ts
 captcha-page.html
 

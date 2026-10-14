@@ -19,12 +19,14 @@ import {
   examClockToMinutes,
   findClassOverlaps,
   findExamOverlaps,
+  issueCancelToken,
   issuePreviewToken,
   leaveFingerprint,
   minutesOfDay,
   normaliseExamDate,
   normaliseTime,
   validateLeave,
+  verifyCancelToken,
   verifyPreviewToken,
   type LeaveRequest,
 } from "../src/services/leave.js";
@@ -290,6 +292,21 @@ check("a forged preview token is rejected", () => {
   assert.equal(verifyPreviewToken(r, leaveFingerprint(r), PREVIEW_OWNER).ok, false);
 });
 
+// --- server-signed cancel tokens -------------------------------------------
+check("an issued cancel token verifies for its leave id only", () => {
+  // Fresh token per assertion: verifies are single-use.
+  assert.deepEqual(verifyCancelToken("L9000001", issueCancelToken("L9000001", PREVIEW_OWNER), PREVIEW_OWNER), { ok: true });
+  assert.deepEqual(verifyCancelToken("l9000001", issueCancelToken("L9000001", PREVIEW_OWNER), PREVIEW_OWNER), { ok: true }, "ids match case-insensitively");
+  assert.equal(verifyCancelToken("L9000002", issueCancelToken("L9000001", PREVIEW_OWNER), PREVIEW_OWNER).ok, false, "another id must not verify");
+  assert.equal(verifyCancelToken("L9000001", issueCancelToken("L9000001", PREVIEW_OWNER), "test-owner-b").ok, false, "another caller must not verify");
+});
+
+check("an apply token never verifies as a cancel token", () => {
+  // Domain separation: same caller, same process, different handshake.
+  const tok = issuePreviewToken(req(), PREVIEW_OWNER);
+  assert.equal(verifyCancelToken("L9000001", tok, PREVIEW_OWNER).ok, false);
+});
+
 // --- class overlap ---------------------------------------------------------
 const CLASSES = [
   { date: "2026-10-20", courseCode: "ABC105", courseName: "Course E", startTime: "08:30", endTime: "10:00", venue: "AB-318" },
@@ -355,6 +372,20 @@ check("a multi-day leave keeps boundary filtering on first and last days", () =>
   assert.ok(r.missed.some((m) => m.date === "2026-10-21"), "interior day is fully missed");
   assert.ok(!r.missed.some((m) => m.date === "2026-10-22"), "11:40 class after a 10:00 return is not missed");
   assert.ok(r.partialDays.includes("2026-10-20"), "20th reported as partial");
+});
+
+check("partialDays does not depend on session order", () => {
+  // One missed class + one outside-window class on the same day: both orders
+  // must report the partial day. Regression guard — the old code only marked
+  // partial when no miss had been recorded yet for the date.
+  const leave = { fromDate: "2026-11-03", fromTime: "12:00", toDate: "2026-11-03", toTime: "18:00" };
+  const late = { date: "2026-11-03", courseCode: "ABC101", courseName: "A", startTime: "14:00", endTime: "15:00", venue: "X" };
+  const early = { date: "2026-11-03", courseCode: "ABC102", courseName: "B", startTime: "09:00", endTime: "10:00", venue: "Y" };
+  for (const sessions of [[late, early], [early, late]]) {
+    const r = findClassOverlaps(leave, sessions);
+    assert.equal(r.missed.length, 1);
+    assert.deepEqual(r.partialDays, ["2026-11-03"], `order ${sessions[0].courseCode}-first`);
+  }
 });
 
 check("classes outside the window are never counted", () => {

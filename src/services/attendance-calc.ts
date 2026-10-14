@@ -272,6 +272,51 @@ export function countUpcoming(days: UpcomingClassDay[]): Record<string, number> 
   return counts;
 }
 
+/** Term bounds derived from an academic calendar fetch. */
+export interface TermBounds {
+  firstInstructionalDay: string | null;
+  lastInstructionalDay: string | null;
+  instructionalDaysTotal: number;
+  instructionalDaysRemaining: number;
+  /** True when today is past the last instructional day: no more classes can
+   *  occur, so attendance figures are final (locked), not projectable. */
+  teachingOver: boolean | null;
+}
+
+/**
+ * Term bounds from the academic calendar. The fetcher is injected so tools
+ * pass their client method and tests pass fakes. Nulls when unreadable —
+ * never fabricated dates.
+ */
+export async function termBounds(
+  getCalendar: (semesterId: string, fromISO: string, toISO: string) => Promise<CalendarDay[]>,
+  semesterId: string,
+  today: string,
+): Promise<TermBounds> {
+  const days = await getCalendar(semesterId, "1900-01-01", "2999-12-31");
+  const instructional = days
+    .filter((d) => d.instructional)
+    .map((d) => d.date)
+    .sort();
+  if (instructional.length === 0) {
+    return {
+      firstInstructionalDay: null,
+      lastInstructionalDay: null,
+      instructionalDaysTotal: 0,
+      instructionalDaysRemaining: 0,
+      teachingOver: null,
+    };
+  }
+  const first = instructional[0];
+  const last = instructional[instructional.length - 1];
+  return {
+    firstInstructionalDay: first,
+    lastInstructionalDay: last,
+    instructionalDaysTotal: instructional.length,
+    instructionalDaysRemaining: instructional.filter((d) => d >= today).length,
+    teachingOver: today > last,
+  };
+}
 /** Date-aware projection for one course given its upcoming session count. */
 export function projectDeadline(
   attended: number,

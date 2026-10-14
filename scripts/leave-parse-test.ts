@@ -9,7 +9,7 @@
  * production.
  */
 import assert from "node:assert/strict";
-import { parseLeaveTypeOptions, parseLeaveRecords } from "../src/services/vtop-parser.js";
+import { parseLeaveTypeOptions, parseLeaveRecords, parseLeaveCancelControls } from "../src/services/vtop-parser.js";
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -193,10 +193,47 @@ check("the header row is never mistaken for a data row", () => {
 });
 
 check("a status table without gate columns reports null, not false", () => {
-  const rows = parseLeaveRecords(EMPTY_STATUS_HTML);
-  // No data rows at all here, so the meaningful assertion is that the parser
-  // does not fabricate gate values for a table that lacks the columns.
-  assert.equal(rows.length, 0);
+  // Must observe a real data row: an empty table proves nothing about the
+  // gate-pass fields.
+  const rows = parseLeaveRecords(`<table>
+    <tr><th>Leave Id</th><th>Visit Place</th><th>Status</th></tr>
+    <tr><td>L9000001</td><td>Bhopal</td><td>REQUEST APPROVED</td></tr>
+  </table>`);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].gatePassOut, null);
+  assert.equal(rows[0].gatePassIn, null);
+});
+
+check("cancel links bind to their own leave row, other rows stay unbound", () => {
+  // Shape as VTOP renders row actions; the control target is read, not guessed.
+  const html = `<table>
+    <tr><th>Leave Id</th><th>Visit Place</th><th>Status</th><th>Action</th></tr>
+    <tr><td>L9000001</td><td>Bhopal</td><td>REQUEST APPROVED</td>
+      <td><a href="hostels/student/leave/4?control=cancel&leaveId=L9000001">Cancel</a></td></tr>
+    <tr><td>L9000002</td><td>Sehore</td><td>PROCTOR APPROVAL PENDING</td><td></td></tr>
+  </table>`;
+  const ctrls = parseLeaveCancelControls(html);
+  assert.equal(ctrls.length, 1);
+  assert.equal(ctrls[0].leaveId, "L9000001");
+  assert.equal(ctrls[0].kind, "href");
+  assert.equal(ctrls[0].params.leaveId, "L9000001");
+});
+
+check("onclick withdraw calls are reported, not executed or guessed", () => {
+  const html = `<table>
+    <tr><th>Leave Id</th><th>Status</th><th>Action</th></tr>
+    <tr><td>L9000003</td><td>REQUEST APPROVED</td>
+      <td><button onclick="withdrawLeave('L9000003','OG1')">Withdraw</button></td></tr>
+  </table>`;
+  const ctrls = parseLeaveCancelControls(html);
+  assert.equal(ctrls.length, 1);
+  assert.equal(ctrls[0].kind, "onclick");
+  assert.equal(ctrls[0].action, "withdrawLeave");
+  assert.equal(ctrls[0].params.arg0, "L9000003");
+});
+
+check("rows without a withdraw affordance yield no controls", () => {
+  assert.deepEqual(parseLeaveCancelControls(HISTORY_HTML), []);
 });
 
 console.log(`\n${passed} checks passed.`);

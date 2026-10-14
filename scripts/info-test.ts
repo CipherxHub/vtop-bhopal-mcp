@@ -173,6 +173,37 @@ async function main() {
     assert.equal(r.discrepancies[0].gradeBasedCompleted, false);
     assert.ok(r.discrepancyNote, "must warn the model not to trust either side");
   });
+  await check("get_pending_subjects groups leftovers by basket with counts", async () => {
+    const r = await callJson(client, "get_pending_subjects");
+    assert.ok(r.byBasket["Programme Core"], "core basket present");
+    assert.ok(r.byBasket["Programme Elective"], "elective basket present");
+    const core = r.byBasket["Programme Core"];
+    assert.equal(core.totalCount, core.completedCount + core.pending.length);
+    assert.equal(core.pendingCredits, core.pending.reduce((s: number, c: any) => s + c.credits, 0));
+    for (const p of r.pending) assert.ok(p.category, "every pending course names its basket");
+    assert.equal(r.byBasket["Programme Core"].pendingCredits, 12, "202L+303L+404L x 4cr");
+    assert.equal(r.byBasket["Programme Core"].completedCount, 1, "101L done");
+    assert.equal(r.byBasket["Programme Core"].totalCount, 4);
+    assert.equal(r.byBasket["Programme Elective"].pendingCredits, 3, "505L x 3cr");
+  });
+
+  // get_course_basket ---------------------------------------------------------
+  await check("get_course_basket finds a course by code with basket + credits", async () => {
+    const r = await callJson(client, "get_course_basket", { query: "BTST101L" });
+    assert.equal(r.count, 1);
+    assert.equal(r.matches[0].basket, "Programme Core");
+    assert.equal(r.matches[0].credits, 4);
+  });
+  await check("get_course_basket finds courses by title fragment", async () => {
+    const r = await callJson(client, "get_course_basket", { query: "network" });
+    assert.ok(r.count >= 1, "Networks-titled course must match");
+    assert.ok(r.matches.every((m: any) => m.basket && m.courseCode));
+  });
+  await check("get_course_basket says so when nothing matches", async () => {
+    const r = await callJson(client, "get_course_basket", { query: "ZZZ9" });
+    assert.equal(r.count, 0);
+    assert.match(r.note ?? "", /course code/);
+  });
 
   // get_fee_receipts ------------------------------------------------------------
   await check("get_fee_receipts lists receipts with a total", async () => {

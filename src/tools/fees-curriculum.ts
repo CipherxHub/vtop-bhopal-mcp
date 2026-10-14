@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { VtopClient } from "../services/vtop-client.js";
 import { VtopError } from "../services/errors.js";
 import {
@@ -75,6 +76,59 @@ export function registerCurriculumBasketTools(server: McpServer, client: VtopCli
 
   mkJsonTool(
     server,
+    "get_course_basket",
+    "Which curriculum basket a course belongs to: pass a course code (e.g. 'CSD3002') or a title fragment (e.g. 'salesforce') and get back every matching catalogue course with its basket (Programme Core, Programme Elective, …), credits and completion state. Works for courses you have never taken — it reads the programme catalogue, not your records. Read-only. Requires login.",
+    {
+      query: z
+        .string()
+        .describe("Course code or title fragment to look up, e.g. 'CSD3002' or 'salesforce'."),
+    },
+    async ({ query }) => {
+      const baskets = parseCurriculumBaskets(await client.getCurriculumBasketsHtml());
+      if (baskets.length === 0) {
+        throw new VtopError(
+          "UPSTREAM",
+          "VTOP returned a curriculum page with no recognisable course tables.",
+          "The layout may have changed.",
+        );
+      }
+      const q = query.trim().toLowerCase();
+      if (!q) {
+        throw new Error("query must be a non-empty course code or title fragment.");
+      }
+      const matches: {
+        courseCode: string;
+        courseName: string;
+        basket: string;
+        credits: number;
+        vtopMarkedCompleted: boolean;
+      }[] = [];
+      for (const b of baskets) {
+        for (const c of b.courses) {
+          if (c.code.toLowerCase().includes(q) || c.title.toLowerCase().includes(q)) {
+            matches.push({
+              courseCode: c.code,
+              courseName: c.title,
+              basket: b.category,
+              credits: c.credits,
+              vtopMarkedCompleted: c.vtopMarkedCompleted,
+            });
+          }
+        }
+      }
+      return {
+        query: query.trim(),
+        count: matches.length,
+        matches,
+        ...(matches.length === 0
+          ? { note: "No catalogue course matches. Try the course code (e.g. CSE3xxx) as listed in the registration basket." }
+          : {}),
+      };
+    },
+  );
+
+  mkJsonTool(
+    server,
     "get_pending_subjects",
     "Subjects still to complete: the curriculum baskets minus grade-history passes, with names and credits. Completion is decided ONLY by course code against the latest grade on record (a pass is any grade except F; N never counts as a pass) — period labels are never compared, because timetable labels are instructional semesters while grade-history labels are result-publication months. VTOP's own row marking is reported alongside, and any disagreement lands in discrepancies rather than being resolved silently. For elective baskets only N of M credits are required, so every uncompleted basket course is listed and the category totals say how far short. Read-only. Requires login.",
     EmptySchema.shape,
@@ -94,10 +148,25 @@ export function registerCurriculumBasketTools(server: McpServer, client: VtopCli
       }
       const { pending, completedCount, discrepancies } = computePendingSubjects(baskets, history);
       const pendingCredits = pending.reduce((s, c) => s + c.credits, 0);
+      // Grouped by basket so "what is left, and from where" reads directly:
+      // per basket, pending courses with their credits plus completed counts.
+      const byBasket: Record<string, { pending: typeof pending; pendingCredits: number; completedCount: number; totalCount: number }> = {};
+      for (const b of baskets) {
+        const inBasket = pending.filter((p) => p.category === b.category);
+        if (inBasket.length === 0 && !b.courses.length) continue;
+        const done = b.courses.length - inBasket.length;
+        byBasket[b.category] = {
+          pending: inBasket,
+          pendingCredits: Math.round(inBasket.reduce((s, c) => s + c.credits, 0) * 100) / 100,
+          completedCount: done,
+          totalCount: b.courses.length,
+        };
+      }
       return {
         pendingCount: pending.length,
         pendingCredits: Math.round(pendingCredits * 100) / 100,
         completedCount,
+        byBasket,
         pending,
         discrepancies,
         ...(discrepancies.length > 0

@@ -8,11 +8,11 @@
 
 An [MCP](https://modelcontextprotocol.io) server. Connect it to OpenCode, Claude Code, Claude Desktop, Cursor or anything else that speaks MCP, then just ask. It signs in to VTOP, reads the page, and answers.
 
-> ### ⚠️ Exactly one tool writes to your account
+> ### ⚠️ Exactly two tools write to your account
 >
-> Of the 29 tools, **28 are strictly read-only.** One is not: **`apply_leave`** submits a real hostel leave application for your proctor. That is the only write.
+> Of the 33 tools, **31 are strictly read-only.** Two are not: **`apply_leave`** submits a real hostel leave application for your proctor, and **`cancel_leave`** withdraws one. Those are the only writes.
 >
-> It cannot fire by accident. It is two-step — a **preview** call validates and returns a fingerprint token without sending anything, and a **confirm** call must repeat the identical fields *and* that token. Change any field in between and it's refused. It also declares `readOnlyHint: false` so a compliant client prompts rather than auto-approving.
+> Neither can fire by accident. Both are two-step — a **preview** call validates and returns a single-use token without sending anything, and a **confirm** call must repeat the identical target *and* that token. Change anything in between and it's refused. Both declare `readOnlyHint: false` so a compliant client prompts rather than auto-approving.
 >
 > Details in [docs/hostel-leave.md](docs/hostel-leave.md).
 
@@ -335,11 +335,11 @@ full client restart after `config.toml` / Desktop JSON edits;
 code — rebuilding `dist/` does nothing to a process that already loaded it,
 so kill leftovers after every rebuild.
 
-**10. `apply_leave` and approvals.**
-Of the 29 tools, 28 are read-only. `apply_leave` submits a real hostel leave
-application to your proctor — two-step (preview returns a token, confirm
-repeats the identical fields plus that token), but a live write all the same.
-Keep approval prompts on for it (and for `login`) in clients that support
+**10. `apply_leave`, `cancel_leave` and approvals.**
+Of the 33 tools, 31 are read-only. `apply_leave` submits a real hostel leave
+application to your proctor and `cancel_leave` withdraws one — both two-step (preview returns a token, confirm
+repeats the identical target plus that token), but live writes all the same.
+Keep approval prompts on for them (and for `login`) in clients that support
 them, and never share a `.env` or a `config.toml` holding someone else's
 credentials: the account behind them is the one VTOP sees.
 
@@ -350,6 +350,7 @@ credentials: the account behind them is the one VTOP sees.
 | | Tool | What it does |
 |---|---|---|
 | 🎓 | `get_attendance` | Attended / total / percentage per course |
+| 🎓 | `get_attendance_detail` | Per-class present/absent per day, or NOT POSTED |
 | 🎓 | `calculate_attendance` | How many classes you can still skip (or must attend) to hold 75% |
 | 🎓 | `get_today_classes` | Today's classes — times and rooms, holiday-aware |
 | 🎓 | `get_timetable` | Registered courses, slots, venues, faculty, credits |
@@ -360,7 +361,9 @@ credentials: the account behind them is the one VTOP sees.
 | 📊 | `get_semester_grades` | Grades and GPA for one semester |
 | 📊 | `get_grade_history` | CGPA, credits, courses grouped by exam month |
 | 📊 | `get_curriculum_progress` | Credits earned vs required, by category |
+| 📊 | `get_course_basket` | Which basket a course is in, and its credits |
 | 🗓 | `get_calendar` | Holidays, exams, events, instructional days |
+| 🗓 | `get_semester_info` | Term bounds, days left, teaching-over flag |
 | 🗓 | `get_semesters` | All your semesters and their IDs |
 | 🗓 | `get_profile` | Name, registration number, programme, branch |
 | 🏠 | `get_leave_types` | Leave types VTOP currently offers |
@@ -368,6 +371,7 @@ credentials: the account behind them is the one VTOP sees.
 | 🔐 | `session_status` | Whether you're logged in and whether VTOP agrees |
 | 🔐 | `get_captcha` · `login` · `logout` | Signing in and out |
 | ⚠️ | **`apply_leave`** | **Submits a real leave application** — two-step, see above |
+| ⚠️ | **`cancel_leave`** | **Withdraws an applied leave** — two-step, see above |
 | 🔍 | `get_leave_type_rules` | Probes VTOP for per-type rules. Never submits |
 
 Full reference, including arguments and return shapes: **[docs/tools.md](docs/tools.md)**.
@@ -384,7 +388,7 @@ Full reference, including arguments and return shapes: **[docs/tools.md](docs/to
 
 | | |
 |---|---|
-| [docs/tools.md](docs/tools.md) | All 29 tools — arguments, returns, read/write |
+| [docs/tools.md](docs/tools.md) | All 33 tools — arguments, returns, read/write |
 | [docs/hostel-leave.md](docs/hostel-leave.md) | Leave types, rules, the two-step confirmation |
 | [docs/http-connector.md](docs/http-connector.md) | Hosting it remotely, and its security model |
 | [docs/errors.md](docs/errors.md) | Error codes, recovery paths, troubleshooting |

@@ -271,6 +271,9 @@ interface LayoutOpts {
 
 function layout(o: LayoutOpts): string {
   const canonical = `${o.origin}${o.canonicalPath}`;
+  // JSON-LD rides inside a <script> block: escape "<" so a poisoned Host
+  // value (via a misrouted proxy) cannot break out of it. All other origin
+  // interpolations already go through escapeHtml.
   const jsonLd = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -281,7 +284,7 @@ function layout(o: LayoutOpts): string {
     url: o.origin,
     author: { "@type": "Person", name: AUTHOR_NAME, url: AUTHOR_URL },
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  });
+  }).replace(/</g, "\\u003c");
   const favicon =
     "data:image/svg+xml," +
     encodeURIComponent(

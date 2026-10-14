@@ -1,6 +1,6 @@
 # Tool reference
 
-29 tools. **28 read-only, 1 writes.** Argument schemas below are the real ones
+33 tools. **31 read-only, 2 write.** Argument schemas below are the real ones
 from `src/schemas/index.ts` — this file is generated from the same source the
 server validates against.
 
@@ -33,6 +33,15 @@ Attended / total / percentage per course.
 > with `null` counts are reported without projections (`currentPercent: null`,
 > no deadline math) rather than as debarred.
 
+### `get_attendance_detail`
+
+Per-class sessions for one course: date and outcome per posted class
+(Present / Absent / On Duty). Ask "was I present on 2026-10-12 in BCSE302L?"
+with `courseCode` + `date`; omit `date` to list every posted session. A date
+with no row means VTOP posted nothing for it — NOT POSTED, never absent.
+
+**Args:** `semesterId?`, `refresh?`, `courseCode`, `date?` — ISO `YYYY-MM-DD`
+
 ### `calculate_attendance`
 
 The bunk calculator. How many more classes you can skip, or must attend, to hold
@@ -46,6 +55,7 @@ a target percentage.
 | `untilDate` | `string?` | ISO date to project to (e.g. a CAT-2 cutoff). Uses the timetable grid + academic calendar: working days, holidays, working Saturdays, day-orders. |
 | `includeUntilDate` | `boolean?` | Count classes **on** the closing date. Default `true`. |
 | `bunkDates` | `string[]?` | Dates you plan to skip. Requires `untilDate`. Reports whether you'd still be safe by the close if you skip exactly those and attend everything else. |
+| `toTermEnd` | `boolean?` | Project to the last instructional day of the term automatically (from the calendar) instead of passing `untilDate`. When teaching is over, returns the figures as final (locked) with no projection. |
 
 `untilDate` and `bunkDates` are what make this useful rather than arithmetic —
 without them it can only divide numbers you already have.
@@ -140,7 +150,27 @@ own completion marking, reported verbatim.
 
 **Args:** none
 
+### `get_course_basket`
+
+Which curriculum basket a course belongs to: pass a course code
+(`CSD3002`) or title fragment (`salesforce`) and get every matching
+catalogue course with its basket (Programme Core, Programme Elective, …),
+credits and completion state. Reads the programme catalogue, so it works
+for courses never taken.
+
+**Args:** `query`
+
 ### `get_pending_subjects`
+
+Subjects still to complete, with names and credits: the curriculum baskets
+minus grade-history passes. Completion is decided ONLY by course code against
+the latest grade on record (a pass is any grade except F; N never counts).
+Period labels are never compared — timetable labels are instructional
+semesters while grade-history labels are result-publication months. Any
+disagreement between VTOP's own marking and grade history lands in
+`discrepancies` and is never resolved silently. Leftovers are also grouped
+by basket (`byBasket`: pending courses, credits and completed/total counts
+per basket).
 
 Subjects still to complete, with names and credits: the curriculum baskets
 minus grade-history passes. Completion is decided ONLY by course code against
@@ -170,6 +200,15 @@ disagreement between VTOP's own marking and grade history lands in
 | `query` | `string?` | Case-insensitive name search (`technovit`, `pongal`) |
 | `holidaysOnly` | `boolean?` | Only non-instructional days |
 | `classGroup` | `string?` | Whose calendar: `COMB` (combined, default), `ALL`, `FS`, `FT` and programme variants. VTOP publishes the list per semester. |
+
+### `get_semester_info`
+
+Term bounds for a semester: id, name, first/last instructional day from the
+academic calendar, instructional-day totals, days remaining, and whether
+teaching is over. When `teachingOver` is true, no more classes can occur —
+attendance figures are final (locked), not projectable.
+
+**Args:** `semesterId?` (default: current)
 
 ### `get_semesters`
 
@@ -228,6 +267,7 @@ Full documentation: **[hostel-leave.md](hostel-leave.md)**.
 | `get_leave_history` | none | no — full history incl. approved past leaves |
 | `get_leave_type_rules` | `leaveCode?` | no — diagnostic probe |
 | `apply_leave` | see below | **yes** |
+| `cancel_leave` | see below | **yes** — withdraws an applied leave, two-step like `apply_leave` |
 
 ## Fees
 
@@ -256,10 +296,27 @@ breakdown instead of the list. Amounts are as printed, no conversion.
 | `confirm` | `boolean?` | **Unset on the first call.** `true` + a token to actually submit |
 | `previewToken` | `string?` | From the preview. Required with `confirm: true` |
 
-Two-step: preview returns a `previewToken` (an FNV-1a fingerprint over every
-field) and sends nothing. Submitting requires the identical fields plus that
-token. Edit any field and it's refused. Declares `readOnlyHint: false` so a
-compliant client prompts.
+Two-step: preview returns a server-signed, single-use `previewToken` (bound to
+the exact fields and caller, 10-minute expiry) and sends nothing. Submitting
+requires the identical fields plus that token. Edit any field and it's
+refused. Declares `readOnlyHint: false` so a compliant client prompts.
+
+### `cancel_leave`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `leaveId` | `string` | e.g. `L9000001` (see `get_leave_status`) |
+| `confirm` | `boolean?` | **Unset on the first call.** `true` + a token to actually withdraw |
+| `previewToken` | `string?` | From the preview. Required with `confirm: true` |
+
+Two-step like `apply_leave`: preview reports the leave's current record —
+type, dates, approval status exactly as VTOP prints it — plus whether VTOP
+publishes a withdraw control for it, and mints a single-use token bound to
+that leave id and caller. Confirming posts the row's own withdraw target
+(read at runtime, never guessed); script-call controls and missing controls
+fail loud instead of firing blind. The response is re-parsed and must read
+as cancelled, else the result is `WITHDRAW UNCLEAR`. Declares
+`readOnlyHint: false` so a compliant client prompts.
 
 ---
 

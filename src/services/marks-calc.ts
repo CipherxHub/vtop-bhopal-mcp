@@ -146,6 +146,14 @@ export function attendanceRuleFor(
   if (!semesterId) return "unknown";
   const boundary =
     process.env.VTOP_BINARY_ATTENDANCE_FROM?.trim() || BINARY_ATTENDANCE_FROM;
+  // The switchover date is only meaningful for same-campus fixed-width ids
+  // (BL########). A lexicographic compare across campus prefixes ("CH…" >
+  // "BL…") would misclassify pre-switchover terms as binary.
+  const sameCampus =
+    /^[A-Z]{2}\d{8}$/.test(semesterId) &&
+    /^[A-Z]{2}\d{8}$/.test(boundary) &&
+    semesterId.slice(0, 2) === boundary.slice(0, 2);
+  if (!sameCampus) return "unknown";
   return semesterId >= boundary ? "binary" : "banded";
 }
 

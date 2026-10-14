@@ -351,6 +351,14 @@ check("published data overrides the semester default", () => {
   assert.equal(attendanceRuleFor("BL20262701", [PLA1006]), "banded");
 });
 
+check("other-campus ids never compare against the Bhopal switchover", () => {
+  // "CH…" > "BL…" lexicographically, which used to misclassify banded-era
+  // terms as binary. Cross-campus comparison declines instead of guessing.
+  const early = [rec("ABC105", "LTPM", [c("Continous Assessment Test - I", 50, 40, 15, 12)])];
+  assert.equal(attendanceRuleFor("CH20252605", early), "unknown");
+  assert.equal(attendanceRuleFor("BL20262701", early), "binary");
+});
+
 check("no semester and no data -> unknown", () => {
   const early = [rec("C", "LTM", [c("Mid Term", 50, 40, 30, 24)])];
   assert.equal(attendanceRuleFor(null, early), "unknown");
