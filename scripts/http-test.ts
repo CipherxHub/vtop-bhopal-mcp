@@ -246,7 +246,7 @@ try {
   // ------------------------------------------------------------ MCP protocol --
 
   let sessionId = "";
-  await check("initialize returns JSON, not an SSE stream", async () => {
+  await check("initialize without a token is refused before content negotiation", async () => {
     const r = await fetch(`${multi.base}/mcp`, {
       method: "POST",
       headers: mcpHeaders(),

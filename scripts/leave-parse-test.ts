@@ -193,10 +193,15 @@ check("the header row is never mistaken for a data row", () => {
 });
 
 check("a status table without gate columns reports null, not false", () => {
-  const rows = parseLeaveRecords(EMPTY_STATUS_HTML);
-  // No data rows at all here, so the meaningful assertion is that the parser
-  // does not fabricate gate values for a table that lacks the columns.
-  assert.equal(rows.length, 0);
+  // Must observe a real data row: an empty table proves nothing about the
+  // gate-pass fields.
+  const rows = parseLeaveRecords(`<table>
+    <tr><th>Leave Id</th><th>Visit Place</th><th>Status</th></tr>
+    <tr><td>L9000001</td><td>Bhopal</td><td>REQUEST APPROVED</td></tr>
+  </table>`);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].gatePassOut, null);
+  assert.equal(rows[0].gatePassIn, null);
 });
 
 check("cancel links bind to their own leave row, other rows stay unbound", () => {

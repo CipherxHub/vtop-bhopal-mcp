@@ -40,6 +40,7 @@ const CALENDAR: CalendarDay[] = [
 
 // --- fake VtopClient: returns fixtures, no network ---------------------------
 let statusCalls = 0;
+let formCalls = 0;
 const STATUS_WITH_CANCEL = `<table>
   <tr><th>Leave Id</th><th>Visit Place</th><th>Reason</th><th>Leave Type</th>
   <th>From</th><th>To</th><th>Status</th><th>Remarks</th><th>Action</th></tr>
@@ -93,6 +94,10 @@ const fakeClient = {
   },
   async getExamScheduleHtml(): Promise<string> {
     return F.EXAM_SCHEDULE_BHOPAL_HTML;
+  },
+  async getLeaveFormHtml(): Promise<string> {
+    formCalls++;
+    return `<select id="leaveCode"><option value="">-Select-</option><option value="OG1">DAY OUTING</option></select>`;
   },
   async fetchPage(endpoint: string): Promise<string> {
     switch (endpoint) {
@@ -326,6 +331,30 @@ async function main() {
     });
     assert.match(bad.mode, /CONFIRM REJECTED/);
     assert.equal(statusCalls, before, "bogus confirm must cost zero status fetches");
+  });
+
+  await check("apply_leave bogus confirm costs zero VTOP reads", async () => {
+    // The confirm handler must verify the token before the form fetch,
+    // semester lookup, calendar, timetable and exams. A forged token that
+    // still triggers reads is a DoS amplifier in exposed single-user mode.
+    const before = formCalls;
+    const badApply = (await client.callTool({
+      name: "apply_leave",
+      arguments: {
+        leaveCode: "OG1",
+        visitingPlace: "Bhopal",
+        leaveFromDate: "2026-10-20",
+        fromTime: "09:00",
+        leaveToDate: "2026-10-20",
+        toTime: "18:00",
+        reason: "Family function in Bhopal.",
+        confirm: true,
+        previewToken: "garbage",
+      },
+    })) as { content: { type: string; text?: string }[] };
+    const text = badApply.content.find((c) => c.type === "text")?.text ?? "";
+    assert.match(JSON.parse(text).mode, /CONFIRM REJECTED/);
+    assert.equal(formCalls, before, "bogus confirm must not read the form");
   });
 
   await client.close();

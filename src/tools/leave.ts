@@ -385,7 +385,7 @@ export function registerLeaveTools(
       // Server-signed single-use token (issue #6) binding the exact fields.
       // Only minted on the preview path; a confirm already consumed its token,
       // and handing a fresh one out inside a rejection would let callers chain
-      // confirm retries without re-previewing.
+      // confirm retries without re-previewing. (fix: audit follow-ups — fabricated rows, day-order overlap, cancel hardening, test gating)
       const previewTokenIssued = confirming ? null : issuePreviewToken(request, previewTokenOwner);
 
       const semesterId = await client.getCurrentSemesterId();

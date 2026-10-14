@@ -88,7 +88,8 @@ function parseCgpaSummary(
   for (let i = tables.length - 1; i >= 0; i--) {
     const $table = $(tables[i]);
     const headerRow = $table.find("tr").first();
-    const headerCells = headerRow.find("td");
+    // Bhopal and Chennai disagree on th vs td headers; read both.
+    const headerCells = headerRow.find("td, th");
     const headerText = headerRow.text().toLowerCase();
     if (!headerText.includes("credits") || !headerText.includes("cgpa")) {
       continue;
