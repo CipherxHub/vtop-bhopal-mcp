@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "../services/vtop-client.js";
-import { weekdayOf, type CalendarDay } from "../services/attendance-calc.js";
+import { weekdayOf, termBounds, type CalendarDay } from "../services/attendance-calc.js";
 import { assertIsoMonth } from "../services/dates.js";
 import { CalendarSchema, SemesterInputSchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
@@ -15,47 +15,6 @@ function istToday(): string {
   }).formatToParts(new Date());
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
-}
-
-export interface TermBounds {
-  firstInstructionalDay: string | null;
-  lastInstructionalDay: string | null;
-  instructionalDaysTotal: number;
-  instructionalDaysRemaining: number;
-  /** True when today is past the last instructional day: no more classes can
-   *  occur, so attendance figures are final (locked), not projectable. */
-  teachingOver: boolean | null;
-}
-
-/** Term bounds derived from the academic calendar. Nulls when unreadable. */
-export async function termBounds(
-  client: VtopClient,
-  semesterId: string,
-  today: string,
-): Promise<TermBounds> {
-  const days = await client.getCalendar(semesterId, "1900-01-01", "2999-12-31");
-  const instructional = days
-    .filter((d) => d.instructional)
-    .map((d) => d.date)
-    .sort();
-  if (instructional.length === 0) {
-    return {
-      firstInstructionalDay: null,
-      lastInstructionalDay: null,
-      instructionalDaysTotal: 0,
-      instructionalDaysRemaining: 0,
-      teachingOver: null,
-    };
-  }
-  const first = instructional[0];
-  const last = instructional[instructional.length - 1];
-  return {
-    firstInstructionalDay: first,
-    lastInstructionalDay: last,
-    instructionalDaysTotal: instructional.length,
-    instructionalDaysRemaining: instructional.filter((d) => d >= today).length,
-    teachingOver: today > last,
-  };
 }
 
 export function registerCalendarTool(server: McpServer, client: VtopClient) {
@@ -127,7 +86,7 @@ export function registerSemesterInfoTool(server: McpServer, client: VtopClient) 
       const id = semesterId ?? (await client.getCurrentSemesterId());
       const name = (await client.getSemesters()).find((s) => s.id === id)?.name ?? null;
       const today = istToday();
-      const bounds = await termBounds(client, id, today);
+      const bounds = await termBounds(client.getCalendar.bind(client), id, today);
       return {
         semesterId: id,
         name,

@@ -93,6 +93,9 @@ export function registerCurriculumBasketTools(server: McpServer, client: VtopCli
         );
       }
       const q = query.trim().toLowerCase();
+      if (!q) {
+        throw new Error("query must be a non-empty course code or title fragment.");
+      }
       const matches: {
         courseCode: string;
         courseName: string;

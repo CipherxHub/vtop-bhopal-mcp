@@ -39,6 +39,21 @@ const CALENDAR: CalendarDay[] = [
 ];
 
 // --- fake VtopClient: returns fixtures, no network ---------------------------
+let statusCalls = 0;
+const STATUS_WITH_CANCEL = `<table>
+  <tr><th>Leave Id</th><th>Visit Place</th><th>Reason</th><th>Leave Type</th>
+  <th>From</th><th>To</th><th>Status</th><th>Remarks</th><th>Action</th></tr>
+  <tr><td>L9000001</td><td>Bhopal</td><td>Family function.</td><td>DAY OUTING</td>
+  <td>07-OCT-2026 12:29</td><td>07-OCT-2026 18:30</td><td>PROCTOR APPROVAL PENDING</td>
+  <td></td><td><a href="hostels/student/leave/4?control=cancel&leaveId=L9000001">Cancel</a></td></tr>
+  <tr><td>L9000002</td><td>Sehore</td><td>Medical check-up.</td><td>SPECIAL OUTING</td>
+  <td>08-OCT-2026 09:00</td><td>08-OCT-2026 18:00</td><td>REQUEST APPROVED</td><td></td><td></td></tr>
+</table>`;
+const STATUS_CANCELLED = (id: string) => `<table>
+  <tr><th>Leave Id</th><th>Status</th><th>Remarks</th></tr>
+  <tr><td>${id}</td><td>CANCELLED</td><td></td></tr>
+</table>`;
+
 const fakeClient = {
   async getCurrentSemesterId(): Promise<string> {
     return "TESTSEM";
@@ -68,6 +83,13 @@ const fakeClient = {
   },
   async getAttendanceDetailHtml(): Promise<string> {
     return F.ATT_DETAIL_HTML;
+  },
+  async getLeaveStatusHtml(): Promise<string> {
+    statusCalls++;
+    return STATUS_WITH_CANCEL;
+  },
+  async cancelLeaveApplication(leaveId: string): Promise<string> {
+    return STATUS_CANCELLED(leaveId);
   },
   async getExamScheduleHtml(): Promise<string> {
     return F.EXAM_SCHEDULE_BHOPAL_HTML;
@@ -220,6 +242,10 @@ async function main() {
     assert.equal(present.verdict, "PRESENT");
     const missing = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L", date: "2026-02-02" });
     assert.equal(missing.verdict, "NOT POSTED");
+    const od = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L", date: "2026-01-03" });
+    assert.equal(od.verdict, "ON DUTY");
+    const ab = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L", date: "2026-01-07" });
+    assert.equal(ab.verdict, "ABSENT");
     const all = await callJson(client, "get_attendance_detail", { courseCode: "BTST101L" });
     assert.ok(all.count >= 4 && all.rows.length === all.count);
   });
@@ -251,6 +277,55 @@ async function main() {
     assert.equal(r.resolvedToTermEnd, true);
     assert.ok(r.courses.length > 0);
     assert.equal(r.verdict ?? null, null, "term still running: no locked verdict");
+  });
+  await check("teaching-over term reports locked figures, no projection", async () => {
+    // Calendar with its only instructional day in the past: the term is over.
+    const pastClient = {
+      ...fakeClient,
+      getCalendar: async (): Promise<CalendarDay[]> => [
+        { date: "2020-01-06", instructional: true, dayOrderWeekday: "MON", label: "Working Day" },
+      ],
+    } as unknown as VtopClient;
+    const { server: pastServer } = createServer(undefined, pastClient);
+    const [t2, s2] = InMemoryTransport.createLinkedPair();
+    const c2 = new Client({ name: "tool-test-past", version: "0.0.0" });
+    await Promise.all([pastServer.connect(s2), c2.connect(t2)]);
+    const info = (await c2.callTool({ name: "get_semester_info", arguments: {} })) as any;
+    const infoJson = JSON.parse(info.content.find((c: any) => c.type === "text")?.text ?? "{}");
+    assert.equal(infoJson.teachingOver, true);
+    assert.match(infoJson.note ?? "", /final/);
+    const calc = (await c2.callTool({ name: "calculate_attendance", arguments: { toTermEnd: true } })) as any;
+    const calcJson = JSON.parse(calc.content.find((c: any) => c.type === "text")?.text ?? "{}");
+    assert.ok(calcJson.verdict, "locked term must produce a final verdict");
+    assert.equal(calcJson.termBounds.teachingOver, true);
+    await c2.close();
+    await pastServer.close();
+  });
+
+  await check("cancel_leave previews with status + withdrawability, then withdraws", async () => {
+    const preview = await callJson(client, "cancel_leave", { leaveId: "L9000001" });
+    assert.match(preview.mode, /PREVIEW/);
+    assert.equal(preview.leave.status, "PROCTOR APPROVAL PENDING");
+    assert.equal(preview.withdrawControlPublished, true);
+    assert.ok(preview.previewToken, "preview mints a token");
+    const done = await callJson(client, "cancel_leave", {
+      leaveId: "L9000001",
+      confirm: true,
+      previewToken: preview.previewToken,
+    });
+    assert.equal(done.mode, "WITHDRAWN");
+  });
+  await check("cancel_leave rejects unknown ids and bogus tokens without VTOP touch", async () => {
+    const unknown = await callJson(client, "cancel_leave", { leaveId: "L0000000" });
+    assert.match(unknown.mode, /REJECTED/);
+    const before = statusCalls;
+    const bad = await callJson(client, "cancel_leave", {
+      leaveId: "L9000001",
+      confirm: true,
+      previewToken: "garbage",
+    });
+    assert.match(bad.mode, /CONFIRM REJECTED/);
+    assert.equal(statusCalls, before, "bogus confirm must cost zero status fetches");
   });
 
   await client.close();

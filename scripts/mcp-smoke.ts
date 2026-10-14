@@ -25,7 +25,6 @@ const EXPECTED_TOOLS = [
   "get_attendance",
   "get_attendance_detail",
   "get_course_basket",
-  "get_attendance_detail",
   "get_timetable",
   "get_marks",
   "get_internal_totals",
@@ -49,10 +48,16 @@ const EXPECTED_TOOLS = [
   "get_acknowledgments",
   "get_proctor_details",
   "get_curriculum_baskets",
-  "get_course_basket",
   "get_pending_subjects",
   "get_fee_receipts",
 ].sort();
+// The list above must not contain duplicates: the missing/extra check below
+// is set-insensitive and would pass with a wrong list.
+assert.equal(
+  new Set(EXPECTED_TOOLS).size,
+  EXPECTED_TOOLS.length,
+  "duplicate tool names in EXPECTED_TOOLS",
+);
 
 /**
  * Tools that WRITE to VTOP. Each must advertise readOnlyHint=false so an MCP
@@ -61,10 +66,15 @@ const EXPECTED_TOOLS = [
  * This is asserted, not assumed: leaving apply_leave on the read-only default
  * would let a client submit a real leave application to a proctor with no
  * prompt at all, which would quietly defeat the tool's two-step confirmation.
+ * Session tools are state-changing too (arming/establishing/clearing the
+ * server-side session), so they pin here as well.
  */
 const WRITE_TOOLS: Record<string, { readOnlyHint: boolean }> = {
   apply_leave: { readOnlyHint: false },
   cancel_leave: { readOnlyHint: false },
+  get_captcha: { readOnlyHint: false },
+  login: { readOnlyHint: false },
+  logout: { readOnlyHint: false },
 };
 
 const SERVER_PATH = path.resolve(process.cwd(), "dist", "index.js");

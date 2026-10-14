@@ -13,6 +13,7 @@ import {
   parseAttendanceDetailRefs,
   parseAttendanceDetail,
   parseAttendanceDetailRows,
+  hasAttendanceDetailTable,
   parseGradeHistory,
   parseExamSchedule,
   parseProgrammeBranch,
@@ -197,6 +198,7 @@ check("parseAttendanceDetail counts statuses + OD hours (lab=2)", () => {
 check("parseAttendanceDetailRows returns one row per session, ISO dates", () => {
   const rows = parseAttendanceDetailRows(F.ATT_DETAIL_HTML);
   assert.ok(rows.length >= 4, `expected rows, got ${rows.length}`);
+  assert.ok(rows.length >= 4, `expected rows, got ${rows.length}`);
   for (const r of rows) {
     assert.match(r.date, /^\d{4}-\d{2}-\d{2}$/, `ISO date, got ${r.date}`);
     assert.ok(["present", "absent", "on-duty", "unknown"].includes(r.marker));
@@ -204,6 +206,13 @@ check("parseAttendanceDetailRows returns one row per session, ISO dates", () => 
   assert.ok(rows.some((r) => r.marker === "present"));
   assert.ok(rows.some((r) => r.marker === "absent"));
   assert.ok(rows.some((r) => r.marker === "on-duty"));
+});
+check("detail table fallback never fabricates rows from other tables", () => {
+  // An error shell with a table but no date/status columns must yield no
+  // table and no rows — the client relies on this to throw UPSTREAM.
+  const html = `<table><tr><td>Sorry</td><td>Unable to process your request</td></tr></table>`;
+  assert.equal(hasAttendanceDetailTable(html), false);
+  assert.deepEqual(parseAttendanceDetailRows(html), []);
 });
 check("parseAttendanceDetail handles 12-hour AM/PM timings (noon-crossing lab)", () => {
   const d = parseAttendanceDetail(F.ATT_DETAIL_AMPM_HTML);

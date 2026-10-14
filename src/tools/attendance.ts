@@ -72,16 +72,26 @@ export function registerAttendanceDetailTool(server: McpServer, client: VtopClie
           rows: [],
         };
       }
+      // One date can hold several sessions (theory + lab rows). A single
+      // headline must not masquerade partial attendance as a clean outcome.
+      const markers = new Set(mine.map((r) => r.marker));
+      const verdict =
+        markers.size === 1
+          ? markers.has("present")
+            ? "PRESENT"
+            : markers.has("absent")
+              ? "ABSENT"
+              : markers.has("on-duty")
+                ? "ON DUTY"
+                : "UNKNOWN"
+          : "MIXED";
       return {
         courseCode: ref.courseCode,
         date,
-        verdict: mine.every((r) => r.marker === "present")
-          ? "PRESENT"
-          : mine.some((r) => r.marker === "absent")
-            ? "ABSENT"
-            : mine.some((r) => r.marker === "on-duty")
-              ? "ON DUTY"
-              : "MIXED/UNKNOWN",
+        verdict,
+        ...(verdict === "MIXED"
+          ? { message: "Sessions on this date disagree — read the rows, not just the headline." }
+          : {}),
         rows: mine,
       };
     },

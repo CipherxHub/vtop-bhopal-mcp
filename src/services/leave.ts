@@ -452,7 +452,7 @@ export function verifyPreviewToken(
  *  a "cancel" domain separator so an apply token can never verify as a cancel
  *  token and vice versa. */
 function cancelDigest(leaveId: string): string {
-  return createHash("sha256").update(`cancel ${leaveId.trim().toUpperCase()}`, "utf8").digest("hex");
+  return createHash("sha256").update(`cancel\u0000${leaveId.trim().toUpperCase()}`, "utf8").digest("hex");
 }
 
 /** Issue a single-use expiring token binding this leave cancellation. */
@@ -722,7 +722,10 @@ export function findClassOverlaps(
       endsOnLastDay && !wholeDay && classStart >= minutesOf(leave.toTime);
 
     if (outsideWindow || afterReturn) {
-      if (!missed.some((m) => m.date === s.date)) dayHasPartial.add(s.date);
+      // A day can hold both missed and outside-window classes: record the
+      // partial day unconditionally so the output never depends on input row
+      // order.
+      dayHasPartial.add(s.date);
       continue;
     }
 

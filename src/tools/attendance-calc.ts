@@ -8,10 +8,10 @@ import {
   planBunk,
   listUpcomingClassDays,
   countUpcoming,
+  termBounds,
 } from "../services/attendance-calc.js";
 import { assertIsoDate } from "../services/dates.js";
 import { CalcAttendanceSchema } from "../schemas/index.js";
-import { termBounds } from "./calendar.js";
 import { mkJsonTool } from "./_helpers.js";
 
 /** Today's date in IST (VIT is UTC+5:30), as ISO YYYY-MM-DD. */
@@ -54,7 +54,7 @@ export function registerAttendanceCalcTool(server: McpServer, client: VtopClient
       let closeDate = untilDate ?? null;
       let bounds: Awaited<ReturnType<typeof termBounds>> | null = null;
       if (toTermEnd && !closeDate) {
-        bounds = await termBounds(client, id, from);
+        bounds = await termBounds(client.getCalendar.bind(client), id, from);
         if (bounds.teachingOver) {
           return {
             thresholdPercent: threshold,
@@ -68,11 +68,28 @@ export function registerAttendanceCalcTool(server: McpServer, client: VtopClient
         closeDate = bounds.lastInstructionalDay;
       }
 
+      // Sessions on the specific days the user plans to skip (needed both
+      // for the no-deadline warning below and the deadline projection).
+      const bunkSet = new Set(bunkDates ?? []);
       if (!closeDate) {
+        // Either no deadline was asked for, or toTermEnd found no term end.
+        // Say which, so a bunkDates scenario is never mistaken for evaluated.
+        const warnings: string[] = [];
+        if (bunkSet.size > 0) {
+          warnings.push(
+            "bunkDates were ignored: no closing date (pass untilDate, or toTermEnd with a readable calendar).",
+          );
+        }
+        if (toTermEnd && !untilDate) {
+          warnings.push(
+            "toTermEnd could not resolve a term end (calendar unreadable) — count-only figures, no deadline projection.",
+          );
+        }
         return {
           thresholdPercent: threshold,
           overallSafe: courses.every((c) => c.isSafe),
           courses,
+          ...(warnings.length ? { warnings } : {}),
         };
       }
       const gridHtml = await client.getTimetableHtml(id);
@@ -81,8 +98,6 @@ export function registerAttendanceCalcTool(server: McpServer, client: VtopClient
       const days = listUpcomingClassDays(schedule, calendar, from, closeDate, includeUntilDate ?? true);
       const counts = countUpcoming(days);
 
-      // Sessions on the specific days the user plans to skip.
-      const bunkSet = new Set(bunkDates ?? []);
       const bunkedCounts = bunkSet.size > 0 ? countUpcoming(days.filter((d) => bunkSet.has(d.date))) : {};
 
       for (const c of courses) {

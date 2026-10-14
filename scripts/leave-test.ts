@@ -374,6 +374,20 @@ check("a multi-day leave keeps boundary filtering on first and last days", () =>
   assert.ok(r.partialDays.includes("2026-10-20"), "20th reported as partial");
 });
 
+check("partialDays does not depend on session order", () => {
+  // One missed class + one outside-window class on the same day: both orders
+  // must report the partial day. Regression guard — the old code only marked
+  // partial when no miss had been recorded yet for the date.
+  const leave = { fromDate: "2026-11-03", fromTime: "12:00", toDate: "2026-11-03", toTime: "18:00" };
+  const late = { date: "2026-11-03", courseCode: "ABC101", courseName: "A", startTime: "14:00", endTime: "15:00", venue: "X" };
+  const early = { date: "2026-11-03", courseCode: "ABC102", courseName: "B", startTime: "09:00", endTime: "10:00", venue: "Y" };
+  for (const sessions of [[late, early], [early, late]]) {
+    const r = findClassOverlaps(leave, sessions);
+    assert.equal(r.missed.length, 1);
+    assert.deepEqual(r.partialDays, ["2026-11-03"], `order ${sessions[0].courseCode}-first`);
+  }
+});
+
 check("classes outside the window are never counted", () => {
   const r = findClassOverlaps(
     { fromDate: "2026-10-22", fromTime: "08:00", toDate: "2026-10-22", toTime: "18:00" },

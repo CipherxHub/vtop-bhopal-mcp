@@ -60,9 +60,10 @@ async function classesInWindow(
   const warning: string[] = [];
   try {
     const calendar = await client.getCalendar(semesterId, fromDate, toDate);
-    const instructional = new Set(
-      calendar.filter((d) => d.instructional).map((d) => d.date),
-    );
+    // Keep the whole day object: dayOrderWeekday carries working-Saturday
+    // overrides (a Saturday running Monday's timetable). Matching on natural
+    // weekday alone makes those classes invisible to the overlap check.
+    const instructional = calendar.filter((d) => d.instructional);
     const grid = parseTimetableGrid(await client.getTimetableHtml(semesterId));
     const gridSessions = grid;
 
@@ -71,11 +72,11 @@ async function classesInWindow(
       startTime: string; endTime: string; venue: string;
     }[] = [];
     for (const day of instructional) {
-      const weekday = weekdayOf(day);
+      const weekday = day.dayOrderWeekday ?? weekdayOf(day.date);
       for (const s of gridSessions) {
         if (s.day !== weekday) continue;
         sessions.push({
-          date: day,
+          date: day.date,
           courseCode: s.courseCode,
           courseName: "",
           startTime: s.startTime,
@@ -84,7 +85,7 @@ async function classesInWindow(
         });
       }
     }
-    if (instructional.size === 0) {
+    if (instructional.length === 0) {
       warning.push(
         "The academic calendar listed no instructional days in this window, so no " +
           "classes could be counted. The overlap check is INCOMPLETE.",
@@ -584,6 +585,29 @@ export function registerLeaveTools(
     CancelLeaveSchema.shape,
     async ({ leaveId, confirm, previewToken }) => {
       const id = leaveId.trim().toUpperCase();
+      const confirming = confirm === true;
+      // Cheap rejection first: token verification needs only id+token+owner,
+      // no VTOP. A bogus confirm must cost zero upstream requests — the write
+      // itself stays gated below regardless.
+      if (confirming) {
+        if (typeof previewToken !== "string" || !previewToken) {
+          return {
+            leaveId: id,
+            mode: "CONFIRM REJECTED - nothing withdrawn",
+            verdict:
+              "confirm=true needs the previewToken from a preview call. Run cancel_leave " +
+              "without confirm first. Nothing was withdrawn, and no VTOP requests were made.",
+          };
+        }
+        const early = verifyCancelToken(id, previewToken, previewTokenOwner);
+        if (!early.ok) {
+          return {
+            leaveId: id,
+            mode: "CONFIRM REJECTED - nothing withdrawn",
+            verdict: `Invalid preview token (${early.reason}). Nothing was withdrawn - preview again.`,
+          };
+        }
+      }
       const statusHtml = await client.getLeaveStatusHtml();
       const records = parseLeaveRecords(statusHtml);
       const record = records.find((r) => (r.leaveId ?? "").toUpperCase() === id) ?? null;
@@ -629,26 +653,8 @@ export function registerLeaveTools(
       }
 
       // --- confirm path: writes ---
-      if (typeof previewToken !== "string" || !previewToken) {
-        return {
-          ...preview,
-          previewToken: null,
-          mode: "CONFIRM REJECTED - nothing withdrawn",
-          verdict:
-            "confirm=true needs the previewToken from a preview call. Run cancel_leave " +
-            "without confirm first. Nothing was withdrawn, and no VTOP requests were made.",
-        };
-      }
-      const check = verifyCancelToken(id, previewToken, previewTokenOwner);
-      if (!check.ok) {
-        return {
-          ...preview,
-          previewToken: null,
-          mode: "CONFIRM REJECTED - nothing withdrawn",
-          verdict: `Invalid preview token (${check.reason}). Nothing was withdrawn - preview again.`,
-        };
-      }
-
+      // The token was already verified above, BEFORE any VTOP request, and
+      // verifying it again here would fail on its own single-use nonce.
       let responseHtml: string;
       try {
         responseHtml = await client.cancelLeaveApplication(id);
@@ -682,11 +688,13 @@ export function registerLeaveTools(
       };
     },
     {
-      // This tool WRITES. readOnlyHint=false is what makes an MCP client raise
-      // a permission prompt instead of auto-withdrawing a leave application.
+      // This tool WRITES — and withdrawing destroys a granted state (a
+      // re-apply starts the proctor cycle over). readOnlyHint=false makes an
+      // MCP client raise a permission prompt; destructiveHint=true keeps
+      // cautious clients from auto-approving it.
       hints: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: true,
       },

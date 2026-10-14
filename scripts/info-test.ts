@@ -181,6 +181,10 @@ async function main() {
     assert.equal(core.totalCount, core.completedCount + core.pending.length);
     assert.equal(core.pendingCredits, core.pending.reduce((s: number, c: any) => s + c.credits, 0));
     for (const p of r.pending) assert.ok(p.category, "every pending course names its basket");
+    assert.equal(r.byBasket["Programme Core"].pendingCredits, 12, "202L+303L+404L x 4cr");
+    assert.equal(r.byBasket["Programme Core"].completedCount, 1, "101L done");
+    assert.equal(r.byBasket["Programme Core"].totalCount, 4);
+    assert.equal(r.byBasket["Programme Elective"].pendingCredits, 3, "505L x 3cr");
   });
 
   // get_course_basket ---------------------------------------------------------
