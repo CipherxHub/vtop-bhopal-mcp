@@ -56,6 +56,15 @@ export function registerCurriculumBasketTools(server: McpServer, client: VtopCli
     EmptySchema.shape,
     async () => {
       const baskets = parseCurriculumBaskets(await client.getCurriculumBasketsHtml());
+      // Every student has a curriculum: zero parsed baskets means the layout
+      // changed, not an empty degree. Fail loud, never categories:0 success.
+      if (baskets.length === 0) {
+        throw new VtopError(
+          "UPSTREAM",
+          "VTOP returned a curriculum page with no recognisable course tables.",
+          "The layout may have changed. Not treated as an empty curriculum.",
+        );
+      }
       return {
         categories: baskets.length,
         courseCount: baskets.reduce((s, b) => s + b.courses.length, 0),
@@ -76,6 +85,13 @@ export function registerCurriculumBasketTools(server: McpServer, client: VtopCli
       ]);
       const baskets = parseCurriculumBaskets(basketsHtml);
       const history = parseGradeHistory(gradesHtml);
+      if (baskets.length === 0) {
+        throw new VtopError(
+          "UPSTREAM",
+          "VTOP returned a curriculum page with no recognisable course tables.",
+          "The layout may have changed. Not treated as all-complete.",
+        );
+      }
       const { pending, completedCount, discrepancies } = computePendingSubjects(baskets, history);
       const pendingCredits = pending.reduce((s, c) => s + c.credits, 0);
       return {

@@ -194,6 +194,11 @@ basics.
 
 **Args:** none
 
+> **Privacy:** this returns sensitive PII (family names/phones, home address,
+> DOB) verbatim. Don't paste it into issues or chats beyond the student's own
+> session, and never enable `VTOP_DUMP_HTML` around it — dumps write raw pages
+> to disk. The session cache holds the page until the server stops.
+
 ### `get_acknowledgments`
 
 Admission document checklist with per-document status (Submitted, Not

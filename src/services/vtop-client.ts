@@ -1199,9 +1199,14 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
       // Must carry the same auth fields a real request does. An earlier version
       // POSTed a bare body, which VTOP 404s unconditionally — so the probe
       // "confirmed" a dead session on every single 404 and the fix was inert.
+      // Same shape as getTimetableHtml (including semesterSubId when known),
+      // so a 404 means the session is dead rather than the params are wrong.
       const formData = new URLSearchParams();
       formData.append("authorizedID", this.authorizedID!);
       if (this.csrfToken) formData.append("_csrf", this.csrfToken);
+      if (this.cachedActiveSemesterId) {
+        formData.append("semesterSubId", this.cachedActiveSemesterId);
+      }
       const res = await this.dataClient().post(ENDPOINTS.timetable, formData, {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
@@ -1251,13 +1256,21 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
           // error — previously a missing VTOP_DUMP_DIR threw ENOENT from inside
           // this try block and turned every data tool into "UPSTREAM: no such
           // file or directory".
+          // Identity pages (profile, proctor) are never dumped: they carry
+          // family/hostel PII that must not land on disk as a side effect.
+          const identityPage = /studentsRecord|proctor/i.test(endpoint);
+          if (identityPage) {
+            console.error(`VtopMCP: skipping HTML dump for identity page ${endpoint}.`);
+          }
           try {
-            const fs = await import("node:fs/promises");
-            const path = await import("node:path");
-            const dir = process.env.VTOP_DUMP_DIR;
-            await fs.mkdir(dir, { recursive: true });
-            const safe = endpoint.replace(/[^\w-]+/g, "_");
-            await fs.writeFile(path.join(dir, `${safe}.html`), html);
+            if (!identityPage) {
+              const fs = await import("node:fs/promises");
+              const path = await import("node:path");
+              const dir = process.env.VTOP_DUMP_DIR;
+              await fs.mkdir(dir, { recursive: true });
+              const safe = endpoint.replace(/[^\w-]+/g, "_");
+              await fs.writeFile(path.join(dir, `${safe}.html`), html);
+            }
           } catch (err: unknown) {
             console.error(
               "VtopMCP: could not dump HTML for",

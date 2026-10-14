@@ -829,7 +829,7 @@ export interface LeaveRecord {
   visitPlace: string;
   reason: string;
   leaveType: string;
-  /** ISO where VTOP gave a parseable date, else the raw string. */
+  /** Verbatim as VTOP prints it ("30-OCT-2026 17:00"), not ISO-normalised. */
   from: string;
   to: string;
   /** Verbatim status, e.g. REQUEST APPROVED / HOSTEL APPROVAL PENDING. */
@@ -932,8 +932,10 @@ export function parseLeaveRecords(html: string): LeaveRecord[] {
       visitPlace: at((h) => h.includes("visit")),
       reason: at((h) => h.includes("reason")),
       leaveType: at((h) => h.includes("leave") && h.includes("type")),
-      from: at((h) => h === "from" || h.startsWith("from")),
-      to: at((h) => h === "to" || h.startsWith("to")),
+      from: at((h) => h === "from" || h.startsWith("from ")),
+      // "to" alone would also bind a "Total"/"Token" column: require the
+      // bare header or a separator right after it.
+      to: at((h) => h === "to" || h.startsWith("to ") || h.startsWith("to-")),
       status,
       remarks: at((h) => h.includes("remark")),
       // Headers are literally "Gate Pass OUT" / "Gate Pass IN". Match on both
@@ -1563,23 +1565,30 @@ export function parseCurriculumBaskets(html: string): CurriculumBasket[] {
     }
 
     const courses: CurriculumCourse[] = [];
+    const seen = new Set<string>();
     $table.find("tbody tr, tr").each((_, tr) => {
       const $tr = $(tr);
       const tds = $tr.children("td").toArray();
       if (tds.length < 8) return;
       const texts = tds.map((c) => clean($(c as never).text()));
-      // Course code sits in the second cell, possibly beside a syllabus icon.
-      const code = (texts[1].match(/[A-Z]{2,}\d+[A-Z]*/)?.[0] ?? "").trim();
-      if (!/^[A-Z]{2,}\d/.test(code)) return;
+      // Course code located by content, not column index: a prepended
+      // checkbox/Sl.No column would otherwise shift every field. Remaining
+      // fields anchor relative to the code cell for the same reason.
+      const codeIdx = texts.findIndex((t) => /^[A-Z]{2,}\d+[A-Z]*$/.test(t.trim()));
+      if (codeIdx < 0) return;
+      const code = (texts[codeIdx].match(/[A-Z]{2,}\d+[A-Z]*/)?.[0] ?? "").trim();
+      if (!/^[A-Z]{2,}\d/.test(code) || seen.has(code)) return;
+      seen.add(code);
+      const at = (i: number) => texts[codeIdx + i] ?? "";
       courses.push({
         code,
-        title: texts[2] ?? "",
-        type: texts[3] ?? "",
-        version: texts[4] ?? "",
-        l: num(texts[5] ?? ""),
-        t: num(texts[6] ?? ""),
-        p: num(texts[7] ?? ""),
-        j: num(texts[8] ?? ""),
+        title: at(1),
+        type: at(2),
+        version: at(3),
+        l: num(at(4)),
+        t: num(at(5)),
+        p: num(at(6)),
+        j: num(at(7)),
         credits: num(texts[texts.length - 1] ?? ""),
         vtopMarkedCompleted: ($tr.attr("class") ?? "").split(/\s+/).includes("bg-success"),
       });
