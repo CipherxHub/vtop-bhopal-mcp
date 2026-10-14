@@ -356,7 +356,7 @@ function canonicalLeave(req: LeaveRequest): string {
     req.leaveToDate.trim(),
     req.toTime.trim(),
     req.reason.trim(),
-  ].join(" ");
+  ].join("\u0000");
 }
 
 /** SHA-256 digest of the bound fields — collision-grinding is infeasible. */
@@ -442,10 +442,12 @@ const MONTHS: Record<string, number> = {
 
 /** VTOP prints exam dates as "30-OCT-2026". Returns ISO, or null. */
 export function normaliseExamDate(raw: string): string | null {
-  const m = /(\d{1,2})-([A-Z]{3})-(\d{4})/i.exec(raw ?? "");
+  // Anchored: the old unanchored pattern matched substrings ("130-OCT-20261").
+  const m = /^(\d{1,2})-([A-Z]{3})-(\d{4})$/i.exec((raw ?? "").trim());
   if (!m) return null;
   const month = MONTHS[m[2].toUpperCase()];
-  if (month === undefined) return null;
+  const day = Number(m[1]);
+  if (month === undefined || day < 1 || day > 31) return null;
   return `${m[4] ?? m[3]}-${String(month + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`;
 }
 

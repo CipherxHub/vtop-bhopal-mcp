@@ -9,6 +9,7 @@ import {
   listUpcomingClassDays,
   countUpcoming,
 } from "../services/attendance-calc.js";
+import { assertIsoDate } from "../services/dates.js";
 import { CalcAttendanceSchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
 
@@ -26,6 +27,10 @@ export function registerAttendanceCalcTool(server: McpServer, client: VtopClient
       "If the response contains NOT_AUTHENTICATED, call get_captcha then login then retry. login auto-uses VTOP_USERNAME/VTOP_PASSWORD env vars if set; if it reports credentials missing, ask the user for them. Requires login.",
     CalcAttendanceSchema.shape,
     async ({ semesterId, courseCode, targetPercent, untilDate, includeUntilDate, bunkDates }) => {
+      // Malformed dates corrupt the month slicing and read as "no classes".
+      // A past untilDate is legitimate (closed window: zero sessions left).
+      assertIsoDate(untilDate, "untilDate");
+      for (const d of bunkDates ?? []) assertIsoDate(d, "bunkDates entry");
       const id = semesterId ?? (await client.getCurrentSemesterId());
       const attHtml = await client.getAttendanceHtml(id);
       let records = parseAttendance(attHtml);

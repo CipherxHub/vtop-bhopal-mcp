@@ -193,6 +193,22 @@ async function main() {
     assert.equal(r.days.length, 1);
     assert.equal(r.days[0].label, "Test Holiday");
   });
+  await check("get_calendar rejects a malformed month instead of ignoring it", async () => {
+    const res = (await client.callTool({ name: "get_calendar", arguments: { month: "2026-13" } })) as {
+      isError?: boolean;
+      content: { type: string; text?: string }[];
+    };
+    assert.equal(res.isError ?? false, true, "bad month must be an error");
+    assert.match(res.content.find((c) => c.type === "text")?.text ?? "", /YYYY-MM/);
+  });
+  await check("calculate_attendance rejects a malformed untilDate", async () => {
+    const res = (await client.callTool({ name: "calculate_attendance", arguments: { untilDate: "30-10-2026" } })) as {
+      isError?: boolean;
+      content: { type: string; text?: string }[];
+    };
+    assert.equal(res.isError ?? false, true, "bad date must be an error");
+    assert.match(res.content.find((c) => c.type === "text")?.text ?? "", /YYYY-MM-DD/);
+  });
 
 
   await client.close();
