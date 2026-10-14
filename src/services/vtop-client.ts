@@ -129,6 +129,13 @@ export class VtopClient {
   private authenticated = false;
   private csrfToken: string | null = null;
   private authorizedID: string | null = null;
+  /**
+   * Consecutive INVALID_CREDENTIALS rejections. A model that ignores the
+   * do-not-retry guidance could otherwise loop get_captcha -> login with the
+   * same wrong password until VTOP locks the account server-side. Past the
+   * cap the client refuses locally. Reset on any successful login.
+   */
+  private consecutiveBadCreds = 0;
 
   /**
    * Fired after the session changes in a way worth persisting (successful login,
@@ -419,7 +426,23 @@ export class VtopClient {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       // initSession resets the jar and rebuilds the clients, so the label —
       // not a held instance — selects which client each attempt uses.
-      const html = await this.initSession(label === "proxy");
+      // A dead network/VTOP outage must surface as a coded error, not a raw
+      // AxiosError with no recovery plan.
+      let html: string;
+      try {
+        html = await this.initSession(label === "proxy");
+      } catch (err) {
+        if (err instanceof VtopError) throw err;
+        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+        if (status === 404) {
+          throw new VtopError(
+            "UPSTREAM",
+            "VTOP did not serve the login page (HTTP 404).",
+            "The prelogin handshake failed before any captcha was seen.",
+          );
+        }
+        throw classify(err);
+      }
       lastHtml = html;
 
       const match =
@@ -593,6 +616,7 @@ export class VtopClient {
       const html: string = res.data;
 
       if (this.absorbAuthFromHtml(html)) {
+        this.consecutiveBadCreds = 0;
         this.onSessionPersist?.();
         if (this.authorizedID) this.onLogin?.(this.authorizedID);
         console.error("VtopMCP: login OK.");
@@ -608,18 +632,30 @@ export class VtopClient {
           "Usually an OCR misread, or the captcha expired between get_captcha and login.",
         );
       }
+      // VTOP's wording varies ("Invalid Username/Password" with a slash,
+      // "Invalid Username or Password" without). Match the nouns and the
+      // connector loosely so a wrong password is never misreported as a
+      // retryable UPSTREAM — retrying it only burns attempts toward lockout.
       if (
-        /invalid\s*(user\s*name|login\s*id|user\s*id)\s*\/\s*password/.test(
+        /invalid\s*(user\s*name|username|login\s*id|user\s*id)[\s/]*(or|\/)?[\s/]*password/.test(
           lower
-        )
+        ) ||
+        /wrong\s*(user\s*name|username|password)/.test(lower)
       ) {
         console.error("VtopMCP: login failed — invalid username/password.");
+        if (++this.consecutiveBadCreds >= 3) {
+          throw new VtopError(
+            "MAX_LOGIN_ATTEMPTS",
+            "Three consecutive bad-credential rejections; refusing to try again locally so the account is not locked.",
+            "Ask the user for fresh credentials instead of retrying the same pair.",
+          );
+        }
         throw new VtopError(
           "INVALID_CREDENTIALS",
           "VTOP rejected the username or password.",
         );
       }
-      if (/account\s*is\s*locked/.test(lower)) {
+      if (/account\s*(is\s*)?locked/.test(lower)) {
         console.error("VtopMCP: login failed — account locked.");
         throw new VtopError(
           "ACCOUNT_LOCKED",
@@ -639,6 +675,7 @@ export class VtopClient {
       try {
         const contentRes = await loginClient.get("/content");
         if (this.absorbAuthFromHtml(contentRes.data)) {
+          this.consecutiveBadCreds = 0;
           this.onSessionPersist?.();
           if (this.authorizedID) this.onLogin?.(this.authorizedID);
           console.error("VtopMCP: login OK (via /content fallback).");

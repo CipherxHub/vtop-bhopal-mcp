@@ -43,7 +43,11 @@ export type MockMode =
   | "invalidCaptcha"
   /** Username/password rejected. */
   | "invalidCreds"
+  /** Username/password rejected with the no-slash wording. */
+  | "invalidCredsOr"
   | "locked"
+  /** Account locked with the short wording (no "is"). */
+  | "lockedShort"
   | "maxAttempts"
   /** Login returns 200 but no authorizedIDX and no recognised error. */
   | "unrecognized";
@@ -226,9 +230,24 @@ export class MockVtop {
         );
         return;
       }
+      if (this.mode === "invalidCredsOr") {
+        session.authenticated = false;
+        this.send(
+          res,
+          this.page("Login", `<div class="err">Invalid Username or Password</div>`),
+          200,
+          setCookie,
+        );
+        return;
+      }
       if (this.mode === "locked") {
         session.authenticated = false;
         this.send(res, this.page("Login", `<div class="err">Account is Locked</div>`), 200, setCookie);
+        return;
+      }
+      if (this.mode === "lockedShort") {
+        session.authenticated = false;
+        this.send(res, this.page("Login", `<div class="err">Account Locked</div>`), 200, setCookie);
         return;
       }
       if (this.mode === "maxAttempts") {
