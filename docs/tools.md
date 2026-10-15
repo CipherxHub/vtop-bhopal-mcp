@@ -1,9 +1,8 @@
 # Tool reference
 
-33 tools. **31 read-only, 2 write.** Argument schemas below are the real ones
+35 tools. **33 read-only, 2 write.** Argument schemas below are the real ones
 from `src/schemas/index.ts` — this file is generated from the same source the
 server validates against.
-
 ---
 
 ## Shared arguments
@@ -253,6 +252,40 @@ department, cabin, email, intercom, mobile. Same data as the proctor section
 of `get_student_profile`, via the standalone proctor page.
 
 **Args:** none
+
+---
+
+## Faculty and syllabus
+
+### `search_faculty`
+
+Faculty directory search with full details in one call (Academics →
+Faculty Info). Every match carries name, designation and school, plus the
+detail card: department, email, cabin (`null` when VTOP publishes none).
+
+**Args:** `name` — fragment, minimum 3 characters, letters and spaces only
+(mirrors VTOP's own search-box validation). Details are fetched for up to 10
+matches; beyond that, refine the fragment.
+
+> The search posts the fragment as `empId` (the search box's *id* is
+> `searchEmployee`, but the page's `getEmployeeInfo()` sends `empId` — posting
+> the box name returns the empty shell). Each row's Action button carries the
+> employee id (numeric like `91001` or alphanumeric like `RST99`) in its id
+> and `getEmployeeIdNo("…")` onclick; the detail call re-sends it as `empId`.
+
+### `get_course_syllabus`
+
+A course's syllabus PDF (My Curriculum → the download icon beside each
+course code). Saves `syllabus-{CODE}.pdf` under `VTOP_DOWNLOAD_DIR` (default
+OS temp dir) and returns the file path plus byte size — open the file to
+read it, since tool results carry the path, not the bytes.
+
+**Args:** `courseCode` — e.g. `CSD3010`
+
+> The download is `GET courseSyllabusDownload1/{CODE}` with the standard auth
+> query fields (the URL the page's `vtopDownload()` opens). VTOP answers
+> failures as HTTP 200 HTML, so a non-`%PDF` answer fails loud instead of
+> saving a fake `.pdf`.
 
 ---
 

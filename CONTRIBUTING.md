@@ -7,7 +7,7 @@
 | [docs/development.md](docs/development.md) | Architecture, tests, how to add a tool |
 | [docs/bhopal-vtop.md](docs/bhopal-vtop.md) | How Bhopal's endpoints and markup actually behave |
 | [docs/http-connector.md](docs/http-connector.md) | Hosting remotely and its security model |
-| [docs/tools.md](docs/tools.md) | The 29 tools and their schemas |
+| [docs/tools.md](docs/tools.md) | The 35 tools and their schemas |
 | [docs/errors.md](docs/errors.md) | Error codes and recovery |
 | [docs/provenance.md](docs/provenance.md) | What came from where, with line counts |
 

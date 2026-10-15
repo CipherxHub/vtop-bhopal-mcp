@@ -23,6 +23,8 @@ Everything here is covered by offline fixtures in `scripts/fixtures.ts` and
 | Curriculum | `academics/common/Curriculum` | Per-category course tables; completed rows carry `bg-success` |
 | Fee receipts | `finance/getStudentReceipts` + `finance/dupReceiptNewP2P` | List, then one receipt's detail HTML. Detail ref is `<no>/8/BPL` plus the list page's `applno`/`regno` hidden fields |
 | Calendar | `academics/common/CalendarPreview` → `getListForSemester` | Semester select fires `getDateForSemesterPreview` (`semSubId`); group select fires `getListForSemester` (`semSubId` + `classGroupId`, 9 groups, `COMB` default) |
+| Faculty search | `hrms/employeeSearchForStudent` → `hrms/EmployeeSearchForStudent` → `hrms/EmployeeSearch1ForStudent` | Search posts the name fragment as **`empId`** (not the box name `searchEmployee`); detail re-sends the row's employee id (numeric or alphanumeric) as `empId`. All three take the standard auth fields |
+| Syllabus PDF | `GET courseSyllabusDownload1/{CODE}` | Auth fields as query params (the `vtopDownload()` URL). Answers `application/pdf`; failures arrive as HTTP 200 HTML |
 
 ### The leave endpoints, specifically
 
@@ -64,6 +66,18 @@ a working Saturday can override the weekday entirely.
 
 **Timetable — the grid returns empty day/time cells.** Each course cell carries a
 nested `sessions` array, which is merged in so day and times get populated.
+
+**Faculty search — the box name is not the field name.** The input's id/name
+is `searchEmployee`, but the page posts `empId`. The results table's header
+row reads "Name of the Faculty / Designation / School / Centre / Action";
+the Action button's id and `getEmployeeIdNo("…")` onclick carry the employee
+id. The detail card is a bordered label/value table; a literal `null` cabin
+means unpublished. Mobile/intercom rows are commented out server-side for
+most records — their absence is normal.
+
+**Syllabus — a PDF behind a GET.** Same auth-fields-as-query pattern as the
+page's `vtopDownload()`. Always check the `%PDF` header: a missing syllabus
+comes back as HTTP 200 HTML.
 
 **Attendance marks vary by semester.** Binary at 75%+ in the current term,
 banded (95+ / 90+ / <75%) in earlier ones. The rule is inferred per semester

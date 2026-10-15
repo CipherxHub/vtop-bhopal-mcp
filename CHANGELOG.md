@@ -6,6 +6,16 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Faculty directory search.** search_faculty queries Academics → Faculty
+  Info by name fragment (minimum 3 letters, letters/spaces only, mirroring
+  the page) and returns every match with its detail card (department, email,
+  cabin — null when unpublished) in one call. The search posts the fragment
+  as `empId`; each row's employee id (numeric or alphanumeric) keys the
+  detail call.
+- **Syllabus download.** get_course_syllabus fetches
+  `courseSyllabusDownload1/{CODE}` and saves the PDF under VTOP_DOWNLOAD_DIR
+  (default OS temp dir), returning the file path and size. A non-PDF answer
+  fails loud instead of saving a fake `.pdf`.
 - **Cancel leave.** cancel_leave withdraws an applied leave behind the same
   two-step preview/confirm handshake as apply_leave (caller-bound single-use
   token). The withdraw target is read from the status view at confirm time,

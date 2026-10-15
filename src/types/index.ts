@@ -237,3 +237,29 @@ export interface FeeReceipt {
   amount: number;
   campus: string;
 }
+
+/** One row of the faculty directory search (Academics → Faculty Info). */
+export interface FacultyMatch {
+  name: string;
+  designation: string;
+  school: string;
+  /**
+   * The row's employee id (numeric like "91001" or alphanumeric like
+   * "RST99") as carried by the Action button's id/onclick. It is VTOP's key
+   * for the detail call — pass it back only through getEmployeeIdNo-shaped
+   * flows, never invent one.
+   */
+  employeeId: string;
+}
+
+/** One faculty member's directory detail card. */
+export interface FacultyDetail {
+  employeeId: string;
+  name: string;
+  designation: string;
+  department: string;
+  school: string;
+  email: string;
+  /** Literal "null" on the page normalises to null — no cabin published. */
+  cabin: string | null;
+}

@@ -9,6 +9,9 @@
  *   npm run test:tools
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../src/server.js";
@@ -112,6 +115,16 @@ const fakeClient = {
       default:
         throw new Error(`fakeClient.fetchPage: unexpected endpoint "${endpoint}"`);
     }
+  },
+  async downloadCourseSyllabus(
+    courseCode: string,
+  ): Promise<{ bytes: Buffer; contentType: string }> {
+    // Mirrors the real client: PDF bytes on success, HTML masquerading as a
+    // download when VTOP has nothing for the code.
+    if (courseCode === "BTST101L") {
+      return { bytes: Buffer.from("%PDF-1.4 fake-syllabus"), contentType: "application/pdf" };
+    }
+    return { bytes: Buffer.from("<html>error</html>"), contentType: "text/html" };
   },
 } as unknown as VtopClient;
 
@@ -355,6 +368,38 @@ async function main() {
     const text = badApply.content.find((c) => c.type === "text")?.text ?? "";
     assert.match(JSON.parse(text).mode, /CONFIRM REJECTED/);
     assert.equal(formCalls, before, "bogus confirm must not read the form");
+  });
+
+  // get_course_syllabus -----------------------------------------------------
+  await check("get_course_syllabus saves a PDF and returns its path", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vtop-syllabus-test-"));
+    const prev = process.env.VTOP_DOWNLOAD_DIR;
+    process.env.VTOP_DOWNLOAD_DIR = dir;
+    try {
+      const r = await callJson(client, "get_course_syllabus", { courseCode: "btst101l" });
+      assert.equal(r.courseCode, "BTST101L");
+      assert.ok(r.file.startsWith(dir), "file must land in VTOP_DOWNLOAD_DIR");
+      assert.equal(r.bytes, Buffer.from("%PDF-1.4 fake-syllabus").length);
+      assert.equal(fs.readFileSync(r.file, "utf8"), "%PDF-1.4 fake-syllabus");
+    } finally {
+      if (prev === undefined) delete process.env.VTOP_DOWNLOAD_DIR;
+      else process.env.VTOP_DOWNLOAD_DIR = prev;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  await check("get_course_syllabus fails loud on a non-PDF answer, never saves it", async () => {
+    const res = (await client.callTool({
+      name: "get_course_syllabus",
+      arguments: { courseCode: "BTST999L" },
+    })) as { isError?: boolean };
+    assert.equal(res.isError ?? false, true, "HTML-as-download must fail, not save a .pdf");
+  });
+  await check("get_course_syllabus rejects malformed course codes", async () => {
+    const res = (await client.callTool({
+      name: "get_course_syllabus",
+      arguments: { courseCode: "CS 101" },
+    })) as { isError?: boolean };
+    assert.equal(res.isError ?? false, true, "bad code shape must fail, not fetch");
   });
 
   await client.close();

@@ -1077,6 +1077,45 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
     return this.getInfoPage(ENDPOINTS.proctorDetails, "proctor details");
   }
 
+  /**
+   * Faculty directory name search (Academics → Faculty Info). The page's own
+   * getEmployeeInfo() posts the name fragment as `empId` (letters/spaces,
+   * minimum 3 characters — enforced by the tool, mirroring the page).
+   */
+  async searchFacultyHtml(name: string): Promise<string> {
+    return this.fetchPage(ENDPOINTS.facultySearch, {
+      empId: name.trim(),
+      x: new Date().toUTCString(),
+    });
+  }
+
+  /**
+   * One faculty member's detail card, keyed by the search row's employee id
+   * (the Action button's id / getEmployeeIdNo("...") onclick). Same `empId`
+   * field the page's getEmployeeIdNo() sends.
+   */
+  async getFacultyDetailHtml(employeeId: string): Promise<string> {
+    return this.fetchPage(ENDPOINTS.facultyDetail, {
+      empId: employeeId.trim(),
+      x: new Date().toUTCString(),
+    });
+  }
+
+  /**
+   * Per-course syllabus PDF bytes. GET courseSyllabusDownload1/{CODE} — the
+   * URL the page's vtopDownload() opens. Callers must verify the %PDF header:
+   * VTOP answers failures as HTTP 200 HTML, and downloadBytes only rejects
+   * bodies it recognises as error pages.
+   */
+  async downloadCourseSyllabus(
+    courseCode: string,
+  ): Promise<{ bytes: Buffer; contentType: string }> {
+    return this.downloadBytes(
+      `${ENDPOINTS.courseSyllabusDownload}/${courseCode.trim().toUpperCase()}`,
+      { x: new Date().toUTCString() },
+    );
+  }
+
   /** Programme curriculum baskets (per-category course tables). */
   async getCurriculumBasketsHtml(): Promise<string> {
     return this.getInfoPage(ENDPOINTS.curriculumBaskets, "curriculum baskets");
@@ -1241,6 +1280,95 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
   ): Promise<string> {
     this.ensureAuthenticated();
     return this.postWithAuth(endpoint, payload);
+  }
+
+  /**
+   * GET an endpoint as raw bytes (syllabus PDFs). Auth fields ride as query
+   * params, matching the page's vtopDownload() window.open URL. Returns the
+   * bytes plus the served content type so callers can fail loud on a non-PDF:
+   * VTOP answers failures as HTTP 200 carrying HTML, never a bare error, and
+   * saving that HTML as ".pdf" would be a lie shaped like a success.
+   */
+  async downloadBytes(
+    endpoint: string,
+    extraParams?: Record<string, string>
+  ): Promise<{ bytes: Buffer; contentType: string }> {
+    this.ensureAuthenticated();
+    const MAX_404_RETRIES = 1;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const res = await this.dataClient().get(endpoint, {
+          params: {
+            authorizedID: this.authorizedID!,
+            ...(this.csrfToken ? { _csrf: this.csrfToken } : {}),
+            ...extraParams,
+          },
+          responseType: "arraybuffer",
+        });
+        const bytes = Buffer.from(res.data);
+        const contentType: string = String(res.headers?.["content-type"] ?? "");
+        if (/html/i.test(contentType) || bytes.subarray(0, 1).toString() === "<") {
+          const head = bytes.subarray(0, 2000).toString("latin1").toLowerCase();
+          if (
+            head.includes("not authorized") ||
+            head.includes("session expired") ||
+            head.includes("vtoploginform")
+          ) {
+            this.authenticated = false;
+            this.authorizedID = null;
+            this.liveCache.clear();
+            this.inflightPages.clear();
+            throw new VtopError(
+              "NOT_AUTHENTICATED",
+              "VTOP session expired.",
+              `VTOP returned an expired/unauthorized page for ${endpoint}.`,
+            );
+          }
+          throw new VtopError(
+            "UPSTREAM",
+            `VTOP answered the ${endpoint} download with an HTML page, not a file.`,
+            head.slice(0, 200),
+          );
+        }
+        return { bytes, contentType };
+      } catch (err: unknown) {
+        if (isNotAuthenticated(err)) {
+          throw err;
+        }
+        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+        const is404 = status === 404 || /status code 404/.test(String(err));
+        if (is404) {
+          if (attempt < MAX_404_RETRIES) {
+            await new Promise((r) => setTimeout(r, 500));
+            continue;
+          }
+          // Same split as postWithAuth: a lone 404 names a bad path, a 404
+          // plus a failing known-good probe names a dead session.
+          if (await this.sessionLooksDead(endpoint)) {
+            this.authenticated = false;
+            this.authorizedID = null;
+            this.liveCache.clear();
+            this.inflightPages.clear();
+            throw new VtopError(
+              "NOT_AUTHENTICATED",
+              "VTOP session expired.",
+              `${endpoint} returned 404 twice, and a known-good endpoint also failed, so the session really is dead.`,
+            );
+          }
+          throw new VtopError(
+            "ENDPOINT_NOT_FOUND",
+            `VTOP has no endpoint at "${endpoint}".`,
+            "HTTP 404 twice on an authenticated request, while a known-good endpoint still works. " +
+              "The path is wrong or renamed; the session is fine.",
+          );
+        }
+        if (err instanceof VtopError) {
+          throw err;
+        }
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to download ${endpoint}: ${msg}`);
+      }
+    }
   }
 
   private ensureAuthenticated(): void {

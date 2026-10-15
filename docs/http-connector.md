@@ -1,6 +1,6 @@
 # HTTP connector
 
-`src/http.ts` serves the same 29 tools as the stdio server, but over
+`src/http.ts` serves the same 35 tools as the stdio server, but over
 **Streamable HTTP** so a remote MCP client can reach them. That is what makes
 the hosted and mobile options possible: Claude's connector model requires a
 server reachable over the internet, and a local stdio process cannot be.
@@ -16,14 +16,14 @@ npm run start:http      # listens on 127.0.0.1:3000 by default
 
 Being precise about this, because it determines how much you should trust it.
 
-**Tested offline — 20 checks in `scripts/http-test.ts`:**
+**Tested offline — 27 checks in `scripts/http-test.ts`:**
 
 | | |
 |---|---|
 | Lifecycle | `/healthz`, `/`, `/robots.txt`, `/sitemap.xml`, `/og.svg` |
 | Auth | tokenless `GET` and `POST /mcp` → 401; garbage token → 401; `/register` → 503 without a secret |
 | Auth regression | `CONNECTOR_SECRET` + env credentials + no token → **401** |
-| Protocol | `initialize` → `mcp-session-id` → `tools/list` → 29 tools with correct `readOnlyHint` flags |
+| Protocol | `initialize` → `mcp-session-id` → `tools/list` → 35 tools with correct `readOnlyHint` flags |
 | Transport | response `Content-Type` is `application/json`, **not** `text/event-stream` |
 | CORS | an `Origin` header gets no `Access-Control-Allow-Origin` by default |
 | Landing page | client-neutral, no phantom npm install, never echoes the password |

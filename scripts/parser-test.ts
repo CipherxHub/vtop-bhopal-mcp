@@ -18,6 +18,8 @@ import {
   parseExamSchedule,
   parseProgrammeBranch,
   parseSemesterGrades,
+  parseFacultySearch,
+  parseFacultyDetail,
 } from "../src/services/vtop-parser.js";
 import * as F from "./fixtures.js";
 
@@ -271,6 +273,50 @@ check("grade history reports gpa:null for a term of only P grades", () => {
   assert.equal(term.gpa, null, "no GPA-bearing credit -> null, not 0");
   assert.equal(term.grades.length, 1);
   assert.equal(term.grades[0].grade, "P");
+});
+
+// --- faculty directory search (numeric + alphanumeric employee ids) ---
+check("parseFacultySearch reads matches with both employee-id shapes", () => {
+  const m = parseFacultySearch(F.FACULTY_SEARCH_HTML);
+  assert.equal(m.length, 2);
+  assert.deepEqual(m[0], {
+    name: "Dr. ADITH RAO",
+    designation: "Assistant Professor Grade 2",
+    school: "School of Testing",
+    employeeId: "91001",
+  });
+  assert.equal(m[1].employeeId, "RST99");
+  assert.equal(m[1].name, "Ms. MEERA NAIR");
+});
+check("parseFacultySearch returns [] on a matchless search, not an error", () => {
+  assert.deepEqual(parseFacultySearch(F.FACULTY_SEARCH_EMPTY_HTML), []);
+});
+check("parseFacultySearch throws UPSTREAM on an error-modal body", () => {
+  assert.throws(
+    () => parseFacultySearch("<div>This menu is not available at present!!!</div>"),
+    /UPSTREAM/,
+  );
+});
+
+// --- faculty detail card ("null" cabin normalises to null) ---
+check("parseFacultyDetail reads the card and nulls the unpublished cabin", () => {
+  const d = parseFacultyDetail("91001", F.FACULTY_DETAIL_HTML);
+  assert.deepEqual(d, {
+    employeeId: "91001",
+    name: "Dr. ADITH RAO",
+    designation: "Assistant Professor Grade 2",
+    department: "TEST-Department",
+    school: "School of Testing",
+    email: "adith.rao@example.com",
+    cabin: null,
+  });
+});
+check("parseFacultyDetail keeps a published cabin verbatim", () => {
+  const html = F.FACULTY_DETAIL_HTML.replace("<td>null</td>", "<td>AB1-204</td>");
+  assert.equal(parseFacultyDetail("91001", html).cabin, "AB1-204");
+});
+check("parseFacultyDetail throws UPSTREAM on a card with no name", () => {
+  assert.throws(() => parseFacultyDetail("91001", "<table></table>"), /UPSTREAM/);
 });
 
 console.log(`\n${passed} checks passed.`);
