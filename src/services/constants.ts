@@ -63,6 +63,10 @@ export const ENDPOINTS = {
   // standard auth fields as query params (the page's vtopDownload() opens
   // exactly that URL). Answers application/pdf on success.
   courseSyllabusDownload: "courseSyllabusDownload1",
+  // Student profile photo. GET users/image/?id={regNo} — the avatar <img> on
+  // every logged-in page. Answers image bytes (observed JPEG bytes served as
+  // image/png, so callers sniff the magic, not the header).
+  profilePicture: "users/image/",
 } as const;
 
 /** `control` values for the leave module. */

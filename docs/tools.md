@@ -218,7 +218,9 @@ All your semesters and their IDs. Use this when you need a specific term.
 ### `get_profile`
 
 Name, registration number, application number, programme, branch, school, and
-contact details.
+contact details — plus the profile photo saved to disk as `photoFile` (open
+that file to see it). A null `photoFile` with a `photoNote` means VTOP served
+no usable image; the text fields stand on their own.
 
 **Args:** none
 

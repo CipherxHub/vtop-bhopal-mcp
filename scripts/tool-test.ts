@@ -44,6 +44,7 @@ const CALENDAR: CalendarDay[] = [
 // --- fake VtopClient: returns fixtures, no network ---------------------------
 let statusCalls = 0;
 let formCalls = 0;
+let photoMode: "jpeg" | "html" = "jpeg";
 const STATUS_WITH_CANCEL = `<table>
   <tr><th>Leave Id</th><th>Visit Place</th><th>Reason</th><th>Leave Type</th>
   <th>From</th><th>To</th><th>Status</th><th>Remarks</th><th>Action</th></tr>
@@ -73,6 +74,17 @@ const fakeClient = {
   },
   async getProfileHtml(): Promise<string> {
     return F.PROFILE_HTML;
+  },
+  async downloadProfilePicture(): Promise<{ bytes: Buffer; contentType: string }> {
+    // Mirrors the live quirk the tool sniffs around: JPEG bytes served as
+    // image/png. photoMode flips to HTML to prove the null-plus-note path.
+    if (photoMode === "html") {
+      return { bytes: Buffer.from("<html>no photo</html>"), contentType: "text/html" };
+    }
+    return {
+      bytes: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]),
+      contentType: "image/png",
+    };
   },
   async getCalendar(_id: string, fromISO: string, toISO: string): Promise<CalendarDay[]> {
     return CALENDAR.filter((d) => d.date >= fromISO && d.date <= toISO).sort((a, b) =>
@@ -154,11 +166,34 @@ async function main() {
 
   // get_profile -------------------------------------------------------------
   await check("get_profile parses the profile fixture", async () => {
-    const p = await callJson(client, "get_profile");
-    assert.equal(p.name, "Ada Lovelace");
-    assert.equal(p.registrationNumber, "21BCE1234");
-    assert.equal(p.branch, "Computer Science and Engineering");
-    assert.equal(p.email, "ada@vitstudent.ac.in");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vtop-photo-test-"));
+    const prev = process.env.VTOP_DOWNLOAD_DIR;
+    process.env.VTOP_DOWNLOAD_DIR = dir;
+    try {
+      const p = await callJson(client, "get_profile");
+      assert.equal(p.name, "Ada Lovelace");
+      assert.equal(p.registrationNumber, "21BCE1234");
+      assert.equal(p.branch, "Computer Science and Engineering");
+      assert.equal(p.email, "ada@vitstudent.ac.in");
+      assert.ok(p.photoFile.startsWith(dir), "photo must land in VTOP_DOWNLOAD_DIR");
+      assert.ok(p.photoFile.endsWith(".jpg"), "JPEG magic must win over the image/png header");
+      assert.ok(fs.existsSync(p.photoFile), "photo file must exist");
+    } finally {
+      if (prev === undefined) delete process.env.VTOP_DOWNLOAD_DIR;
+      else process.env.VTOP_DOWNLOAD_DIR = prev;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  await check("get_profile degrades to null photoFile when VTOP serves no image", async () => {
+    photoMode = "html";
+    try {
+      const p = await callJson(client, "get_profile");
+      assert.equal(p.photoFile, null);
+      assert.ok(p.photoNote, "a note must say why there is no photo");
+      assert.equal(p.name, "Ada Lovelace", "text fields stay good without a photo");
+    } finally {
+      photoMode = "jpeg";
+    }
   });
 
   // get_marks ---------------------------------------------------------------

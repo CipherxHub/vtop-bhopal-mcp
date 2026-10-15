@@ -372,7 +372,7 @@ credentials: the account behind them is the one VTOP sees.
 | 🗓 | `get_calendar` | Holidays, exams, events, instructional days |
 | 🗓 | `get_semester_info` | Term bounds, days left, teaching-over flag |
 | 🗓 | `get_semesters` | All your semesters and their IDs |
-| 🗓 | `get_profile` | Name, registration number, programme, branch |
+| 🗓 | `get_profile` | Name, registration number, programme, branch, plus photo file |
 | 🏠 | `get_leave_types` | Leave types VTOP currently offers |
 | 🏠 | `get_leave_status` | Your leave applications and approval status |
 | 🔐 | `session_status` | Whether you're logged in and whether VTOP agrees |
