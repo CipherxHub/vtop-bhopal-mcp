@@ -21,6 +21,8 @@ import type {
   PendingSubject,
   CompletionDiscrepancy,
   FeeReceipt,
+  FacultyMatch,
+  FacultyDetail,
 } from "../types/index.js";
 import { GRADE_LETTERS, GRADE_POINTS } from "./constants.js";
 
@@ -1885,4 +1887,117 @@ export function parseFeeReceiptDetail(
   });
   const text = clean($.text());
   return { receiptNumber, fields: Object.keys(fields).length > 0 ? fields : { text: text.slice(0, 2000) } };
+}
+
+/**
+ * Faculty directory search rows (hrms/EmployeeSearchForStudent response).
+ *
+ * The results table's header row reads "Name of the Faculty / Designation /
+ * School / Centre / Action"; each data row carries the Action button whose
+ * id AND getEmployeeIdNo("...") onclick hold the row's employee id (numeric
+ * like "91001" or alphanumeric like "RST99"). The commented-out Employee ID
+ * header cell is ignored — the button is the source of truth.
+ *
+ * A header-only table (or no results table at all) is a genuine zero-match
+ * search, returned as []. An error-modal body ("not available", "unable to
+ * process") is an UPSTREAM failure, never an empty directory.
+ */
+export function parseFacultySearch(html: string): FacultyMatch[] {
+  const $ = cheerio.load(html);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const bodyText = clean($.text());
+  if (/this menu is not available|unable to process your request/i.test(bodyText)) {
+    throw new VtopError(
+      "UPSTREAM",
+      "VTOP did not return a faculty search result.",
+      bodyText.slice(0, 200),
+    );
+  }
+  const out: FacultyMatch[] = [];
+  $("table").each((_, table) => {
+    const header = $(table)
+      .find("tr")
+      .first()
+      .children("td,th")
+      .toArray()
+      .map((c) => clean($(c as never).text()).toLowerCase());
+    if (!header.some((h) => h.includes("name of the faculty"))) return;
+    $(table)
+      .find("tr")
+      .slice(1)
+      .each((_, tr) => {
+        const cells = $(tr)
+          .children("td")
+          .toArray()
+          .map((c) => clean($(c as never).text()));
+        if (cells.length < 3 || !cells[0]) return;
+        if (/name of the faculty/i.test(cells[0])) return;
+        const action = $(tr).find("button[onclick*='getEmployeeIdNo'],button[id]").first();
+        const onclick = action.attr("onclick") ?? "";
+        const fromOnclick = onclick.match(/getEmployeeIdNo\(["']([^"']+)["']\)/);
+        const employeeId = fromOnclick?.[1] ?? action.attr("id") ?? "";
+        out.push({
+          name: cells[0] ?? "",
+          designation: cells[1] ?? "",
+          school: cells[2] ?? "",
+          employeeId,
+        });
+      });
+  });
+  return out;
+}
+
+/**
+ * One faculty member's detail card (hrms/EmployeeSearch1ForStudent response).
+ *
+ * A bordered table of label/value rows: "Name of the Faculty", "Designation",
+ * "Name of Department", "School / Centre Name", "E-Mail Id", "Cabin Number".
+ * A literal "null" cabin means VTOP published none and normalises to null.
+ * The photo cell (rowspan, base64 img) is skipped — identity photos are not
+ * directory data. Mobile/intercom rows are commented out server-side for most
+ * records, so their absence is normal, not a parse failure.
+ */
+export function parseFacultyDetail(employeeId: string, html: string): FacultyDetail {
+  const $ = cheerio.load(html);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const bodyText = clean($.text());
+  if (/this menu is not available|unable to process your request/i.test(bodyText)) {
+    throw new VtopError(
+      "UPSTREAM",
+      `VTOP did not return a detail card for employee id "${employeeId}".`,
+      bodyText.slice(0, 200),
+    );
+  }
+  const get = (...labels: string[]): string => {
+    for (const tr of $("table.table-bordered tr").toArray()) {
+      const cells = $(tr)
+        .children("td,th")
+        .toArray()
+        .map((c) => clean($(c as never).text()));
+      if (cells.length < 2 || !cells[0]) continue;
+      if (labels.some((l) => cells[0].toLowerCase() === l.toLowerCase())) {
+        return cells[1] ?? "";
+      }
+    }
+    return "";
+  };
+  const cabinRaw = get("cabin number");
+  const detail: FacultyDetail = {
+    employeeId,
+    name: get("name of the faculty"),
+    designation: get("designation"),
+    department: get("name of department"),
+    school: get("school / centre name"),
+    email: get("e-mail id"),
+    cabin: !cabinRaw || /^null$/i.test(cabinRaw) ? null : cabinRaw,
+  };
+  // A card with no name is a layout change, not an anonymous faculty member.
+  if (!detail.name) {
+    throw new VtopError(
+      "UPSTREAM",
+      `VTOP returned a detail card with no recognisable fields for employee id "${employeeId}".`,
+      "The layout may have changed. Not treated as an empty record.",
+    );
+  }
+  return detail;
 }

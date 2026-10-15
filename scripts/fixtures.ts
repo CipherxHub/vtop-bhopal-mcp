@@ -342,3 +342,40 @@ export const LEAVE_HISTORY_HTML = `
 <tr><td>L9000001</td><td>Home</td><td>Diwali break at home.</td><td>WINTER VACATION</td><td>30-OCT-2026 17:00</td><td>15-NOV-2026 21:00</td><td>PROCTOR APPROVAL PENDING</td><td>REQUEST RAISED</td><td></td><td></td></tr>
 <tr><td>L9000002</td><td>Sehore</td><td>Medical check-up.</td><td>SPECIAL OUTING</td><td>07-OCT-2026 12:29</td><td>07-OCT-2026 18:30</td><td>REQUEST APPROVED</td><td>by [ 900001 ] [ GRACE HOPPER ]</td><td><i class="glyphicon"></i></td><td></td></tr>
 </table>`;
+
+// Faculty directory search: header row plus two matches — one numeric employee
+// id, one alphanumeric (both shapes occur live). The commented-out Employee ID
+// header cell is kept to mirror the real markup.
+export const FACULTY_SEARCH_HTML = `
+<form id="employeeProfileForm">
+<input type="hidden" name="_csrf" value="00000000-0000-0000-0000-000000000000" />
+<input type="hidden" name="authorizedID" id="authorizedID" value="21BCE1234" />
+<input type="text" name="searchEmployee" id="searchEmployee" />
+</form>
+<table class="table" border="1">
+<tr><td>Name of the Faculty</td><td>Designation</td><td>School / Centre</td><td>Action</td></tr>
+<tr><td>Dr. ADITH RAO</td><td>Assistant Professor Grade 2</td><td>School of Testing</td>
+<td><button type="button" value="select" id="91001" onclick="getEmployeeIdNo(&quot;91001&quot;);"><span></span></button></td></tr>
+<tr><td>Ms. MEERA NAIR</td><td>Teaching Fellow</td><td>VIT Business School</td>
+<td><button type="button" value="select" id="RST99" onclick="getEmployeeIdNo(&quot;RST99&quot;);"><span></span></button></td></tr>
+</table>`;
+
+// Faculty directory search with no matches: the same shell, no results table.
+export const FACULTY_SEARCH_EMPTY_HTML = `
+<form id="employeeProfileForm">
+<input type="hidden" name="_csrf" value="00000000-0000-0000-0000-000000000000" />
+<input type="hidden" name="authorizedID" id="authorizedID" value="21BCE1234" />
+<input type="text" name="searchEmployee" id="searchEmployee" />
+</form>`;
+
+// One faculty detail card: label/value rows; the literal "null" cabin means
+// VTOP published none. Photo cell carries no text and is skipped.
+export const FACULTY_DETAIL_HTML = `
+<table class="table table-bordered">
+<tr><td><b>Name of the Faculty </b></td><td>Dr. ADITH RAO</td><td></td></tr>
+<tr><td><b>Designation</b></td><td>Assistant Professor Grade 2</td><td rowspan="10"></td></tr>
+<tr><td><b>Name of Department</b></td><td>TEST-Department</td></tr>
+<tr><td><b>School / Centre Name </b></td><td>School of Testing</td></tr>
+<tr><td><b>E-Mail Id </b></td><td>adith.rao@example.com</td></tr>
+<tr><td><b> Cabin Number </b></td><td>null</td></tr>
+</table>`;

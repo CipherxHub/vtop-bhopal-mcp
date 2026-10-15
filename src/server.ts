@@ -17,6 +17,8 @@ import { registerPassEligibilityTool } from "./tools/pass-eligibility.js";
 import { registerLeaveTools } from "./tools/leave.js";
 import { registerStudentInfoTools } from "./tools/student-info.js";
 import { registerFeesTools, registerCurriculumBasketTools } from "./tools/fees-curriculum.js";
+import { registerFacultyTools } from "./tools/faculty.js";
+import { registerSyllabusTools } from "./tools/syllabus.js";
 // NOTE: there is deliberately no grade predictor. Predicting a letter grade
 // needs the class average and spread, which VTOP does not expose, and VIT
 // grades relatively - so any prediction would be guesswork presented as data.
@@ -31,7 +33,7 @@ export function createServer(
 } {
   const server = new McpServer({
     name: "vtop-mcp",
-    version: "0.1.5",
+    version: "0.1.6",
   });
 
   // In multi-user HTTP mode the caller passes a client shared across all of a
@@ -59,6 +61,8 @@ export function createServer(
   registerStudentInfoTools(server, client);
   registerFeesTools(server, client);
   registerCurriculumBasketTools(server, client);
+  registerFacultyTools(server, client);
+  registerSyllabusTools(server, client);
   // Stdio gets an unpredictable process-local owner; HTTP supplies a stable
   // hash of the authenticated connector token so previews survive a fresh MCP
   // transport while remaining unusable by another connector user.

@@ -24,6 +24,8 @@ import {
   LEAVE_HISTORY_HTML,
   PROCTOR_PAGE_HTML,
   PROFILE_FULL_HTML,
+  FACULTY_SEARCH_HTML,
+  FACULTY_DETAIL_HTML,
 } from "./fixtures.js";
 
 let lastCalendarGroup: string | null = null;
@@ -67,7 +69,12 @@ const fakeClient = {
   async getLeaveHistoryHtml(): Promise<string> {
     return LEAVE_HISTORY_HTML;
   },
-  async getCalendar(
+  async searchFacultyHtml(): Promise<string> {
+    return FACULTY_SEARCH_HTML;
+  },
+  async getFacultyDetailHtml(): Promise<string> {
+    return FACULTY_DETAIL_HTML;
+  },  async getCalendar(
     _id: string,
     fromISO: string,
     toISO: string,
@@ -278,6 +285,31 @@ async function main() {
   await check("get_calendar passes an explicit class group through", async () => {
     await callJson(client, "get_calendar", { month: "2026-01", classGroup: "FS" });
     assert.equal(lastCalendarGroup, "FS");
+  });
+
+  // search_faculty ------------------------------------------------------------
+  await check("search_faculty returns matches with detail cards", async () => {
+    const r = await callJson(client, "search_faculty", { name: "rao" });
+    assert.equal(r.query, "rao");
+    assert.equal(r.count, 2);
+    assert.equal(r.faculty.length, 2);
+    assert.equal(r.faculty[0].name, "Dr. ADITH RAO");
+    assert.equal(r.faculty[0].employeeId, "91001");
+    assert.equal(r.faculty[0].detail.email, "adith.rao@example.com");
+    assert.equal(r.faculty[0].detail.cabin, null);
+    assert.equal(r.faculty[1].employeeId, "RST99");
+  });
+  await check("search_faculty rejects fragments under 3 characters", async () => {
+    const res = (await client.callTool({ name: "search_faculty", arguments: { name: "ab" } })) as {
+      isError?: boolean;
+    };
+    assert.equal(res.isError ?? false, true, "short fragment must fail, not search");
+  });
+  await check("search_faculty rejects non-letter fragments like the page does", async () => {
+    const res = (await client.callTool({ name: "search_faculty", arguments: { name: "r4o" } })) as {
+      isError?: boolean;
+    };
+    assert.equal(res.isError ?? false, true, "digits must fail, not search");
   });
 
   await client.close();

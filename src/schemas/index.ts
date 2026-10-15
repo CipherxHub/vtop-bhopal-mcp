@@ -114,6 +114,22 @@ export const FeeReceiptsSchema = z.object({
     ),
 });
 
+export const FacultySearchSchema = z.object({
+  name: z
+    .string()
+    .describe(
+      "Faculty name fragment to search, e.g. 'pal'. Minimum 3 characters, letters and spaces only — mirroring VTOP's own search-box validation.",
+    ),
+});
+
+export const CourseSyllabusSchema = z.object({
+  courseCode: z
+    .string()
+    .describe(
+      "Course code whose syllabus PDF to download, e.g. 'CSD3010'. Uppercase letters and digits only.",
+    ),
+});
+
 export const ApplyLeaveSchema = z.object({
   leaveCode: z
     .string()

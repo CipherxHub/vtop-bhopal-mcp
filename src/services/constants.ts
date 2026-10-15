@@ -52,6 +52,17 @@ export const ENDPOINTS = {
   leaveForm: "hostels/student/leave/2",
   leaveSubmit: "hostels/student/leave/3",
   leaveStatus: "hostels/student/leave/4",
+  // Faculty directory (Academics → Faculty Info). The page shell loads first;
+  // the name search posts to the capitalised path and each row's Action
+  // button posts the row's employee id to the detail path. All three take the
+  // standard authorizedID/_csrf/x auth fields.
+  facultySearchPage: "hrms/employeeSearchForStudent",
+  facultySearch: "hrms/EmployeeSearchForStudent",
+  facultyDetail: "hrms/EmployeeSearch1ForStudent",
+  // Per-course syllabus PDF. GET courseSyllabusDownload1/{COURSECODE} with the
+  // standard auth fields as query params (the page's vtopDownload() opens
+  // exactly that URL). Answers application/pdf on success.
+  courseSyllabusDownload: "courseSyllabusDownload1",
 } as const;
 
 /** `control` values for the leave module. */

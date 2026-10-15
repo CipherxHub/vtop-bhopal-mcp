@@ -4,7 +4,7 @@
  *
  * Spawns dist/index.js and exchanges JSON-RPC messages over stdio to verify:
  *   1. initialize handshake succeeds and serverInfo.name === "vtop-mcp"
- *   2. tools/list returns exactly the 22 expected tools with proper schemas
+ *   2. tools/list returns exactly the 34 expected tools with proper schemas
  *   3. (network-permitting) tools/call get_captcha returns an image content item
  *
  * Steps 1 and 2 work without VIT network — useful as a CI sanity check.
@@ -25,6 +25,7 @@ const EXPECTED_TOOLS = [
   "get_attendance",
   "get_attendance_detail",
   "get_course_basket",
+  "get_course_syllabus",
   "get_timetable",
   "get_marks",
   "get_internal_totals",
@@ -50,6 +51,7 @@ const EXPECTED_TOOLS = [
   "get_curriculum_baskets",
   "get_pending_subjects",
   "get_fee_receipts",
+  "search_faculty",
 ].sort();
 // The list above must not contain duplicates: the missing/extra check below
 // is set-insensitive and would pass with a wrong list.
