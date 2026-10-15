@@ -1,4 +1,4 @@
-# VTOP Bhopal MCP
+# VTOP MCP Server for VIT Bhopal
 
 > Ask your AI assistant anything about your **VIT Bhopal** VTOP account — attendance, marks, timetable, exams, grades, pass eligibility, hostel leave — in plain language.
 
