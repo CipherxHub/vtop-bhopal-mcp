@@ -70,6 +70,10 @@ npm run build
 
 `dist/` is not committed, so the build step is required.
 
+Prefer hosted? Use it straight from Glama — no clone or build needed:
+
+[![vtop-bhopal-mcp MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/CipherxHub/vtop-bhopal-mcp/badges/card.svg)](https://glama.ai/mcp/servers/CipherxHub/vtop-bhopal-mcp)
+
 ### Your credentials
 
 Create a `.env` in the project folder with **your own** VTOP login
