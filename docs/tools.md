@@ -59,6 +59,16 @@ a target percentage.
 `untilDate` and `bunkDates` are what make this useful rather than arithmetic —
 without them it can only divide numbers you already have.
 
+### `get_timetable`
+
+Registered courses with slots, venues, faculty and credits, plus the weekly
+schedule. Each course carries a `sessions` array with every meeting it has
+(day, slot, THEORY/LAB, start and end time, venue) — a course with two slots
+a week appears twice. This is the tool that answers which faculty teaches
+which of your subjects.
+
+**Args:** `semesterId?`, `refresh?`
+
 ### `get_today_classes`
 
 Today's classes (IST), or a given date.

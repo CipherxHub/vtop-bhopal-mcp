@@ -418,7 +418,7 @@ Full reference, including arguments and return shapes: **[docs/tools.md](docs/to
 ## Limitations
 
 - **Unofficial.** Not affiliated with or endorsed by VIT Bhopal. It reads the same pages your browser does — if VTOP changes them, parts break until updated.
-- **One tool writes.** See [docs/hostel-leave.md](docs/hostel-leave.md). Everything else only reads; it never registers courses, changes marks, or touches fee and payment pages.
+- **Two tools write.** See [docs/hostel-leave.md](docs/hostel-leave.md). Everything else only reads; it never registers courses, changes marks, or touches fee and payment pages.
 - **Leave duration limits are partly unknown.** VTOP enforces them server-side and publishes none. Only Home Town ≤ 14 days is confirmed. Guessing the rest would block valid requests, so it isn't attempted.
 - **Exam overlap is a warning, not a block.** A clash is sometimes unavoidable and isn't this tool's decision to make.
 - **Bunk calculator assumes 75%.** Check your own course rules.
