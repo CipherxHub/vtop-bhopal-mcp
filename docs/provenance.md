@@ -127,7 +127,7 @@ Twelve files with no upstream counterpart, 3,020 lines:
 Plus substantial edits to inherited files: `vtop-parser.ts` (+719/−167 lines
 against VtopMCP), `vtop-client.ts`, `http.ts` (auth, transport, CORS, bind),
 `web.ts`, `schemas/index.ts`, `types/index.ts` — and the test suite, which grew
-from none to **306 offline checks**.
+from none to a full offline suite (357 checks at v0.1.7).
 
 The two line totals in this file measure different things on purpose. **3,020**
 is the code in files that do not exist upstream at all, so it is original by
