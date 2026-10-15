@@ -750,3 +750,62 @@ export function findClassOverlaps(
     partialDays: [...dayHasPartial].sort(),
   };
 }
+
+
+/**
+ * Withdraw POST body for a requestDataListUpdate Cancel button - the TABLE
+ * branch of the leave-status page's own JS (hostels/student/leave/4). Every
+ * field mirrors what the browser sends, byte for byte:
+ * - controlName + its live #id value (jQuery .val() on a missing element is
+ *   undefined, which string-concats to the literal 'undefined' - reproduced
+ *   here rather than 'fixed', since VTOP accepts exactly that).
+ * - form is the button's data-formname, or the literal 'undefined' the page
+ *   produces when the attribute is absent (same literal this codebase already
+ *   sends for the leave form).
+ * - one field per data-parameters entry, read from #name{rowNumber}.
+ * Throws instead of guessing when the wiring is incomplete: a wrong field
+ * here would withdraw nothing while reporting success, or error opaquely.
+ */
+export interface LeaveWithdrawWiring {
+  controlName: string;
+  urlText: string;
+  rowParams: Record<string, string>;
+  cancelButtonValue: string | null;
+  formName: string | null;
+}
+
+export function buildLeaveWithdrawBody(w: LeaveWithdrawWiring): {
+  endpoint: string;
+  body: Record<string, string>;
+} {
+  if (!w.controlName || !w.urlText) {
+    throw new Error(
+      "Withdraw control is missing its wiring (controlname/urltext). " +
+        "Refusing to guess the withdraw POST - report this shape.",
+    );
+  }
+  if (!w.urlText.startsWith("hostels/student/leave/")) {
+    throw new Error(
+      "Withdraw target '" +
+        w.urlText +
+        "' is outside the leave module. " +
+        "Refusing to post somewhere the page never sends withdraws.",
+    );
+  }
+  if (Object.keys(w.rowParams).length === 0) {
+    throw new Error(
+      "Withdraw control carries no row parameters (e.g. leaveId). " +
+        "Refusing to post a withdraw with no leave reference.",
+    );
+  }
+  return {
+    endpoint: w.urlText,
+    body: {
+      [w.controlName]: w.cancelButtonValue ?? "undefined",
+      form: w.formName ?? "undefined",
+      control: w.controlName,
+      ...w.rowParams,
+      x: new Date().toUTCString(),
+    },
+  };
+}

@@ -16,6 +16,7 @@ Everything here is covered by offline fixtures in `scripts/fixtures.ts` and
 | Base | `https://vtop.vitbhopal.ac.in/vtop` | Override with `VTOP_BASE_URL` |
 | Semester list | `StudentTimeTable` | The Chennai-era `StudentTimeTableChn` path returns "not available" |
 | Leave | `hostels/student/leave/1..4` | **One path family driven by a `control` parameter**, not separate routes |
+| Leave withdraw | `hostels/student/leave/5` via `requestDataListUpdate` Cancel button | The status row's button carries `data-controlname="cancelButton"`, `data-urltext`, `data-parameters="['leaveId']"`, `data-rownumber` — the TABLE branch POSTs `_csrf` + `authorizedID` + `cancelButton` + `form` + `control` + row id + `x`. Missing ids concat to the literal `undefined`, like the page |
 | Leave history | `hostels/student/barcodeleave` | Full history; standard `verifyMenu` handshake, NO `leave/1` priming |
 | Profile (all sections) | `studentsRecord/StudentProfileAllView` | Personal/educational/family/proctor/hostel in one response |
 | Acknowledgments | `admissions/AcknowledgmentView` | Document checklist |

@@ -1042,6 +1042,19 @@ export interface LeaveCancelControl {
   action: string;
   /** Query params (href) or positional args as arg0..argN (onclick). */
   params: Record<string, string>;
+  /**
+   * requestDataListUpdate buttons only: the data-* wiring the page's own JS
+   * reads (control name, POST target, row parameters, row number). Absent for
+   * every other control shape.
+   */
+  data?: {
+    controlName: string;
+    urlText: string;
+    parameters: string[];
+    rowNumber: string;
+    /** data-formname when present; absent selects the page JS's TABLE branch. */
+    formName: string | null;
+  };
 }
 
 /**
@@ -1107,7 +1120,21 @@ export function parseLeaveCancelControls(html: string): LeaveCancelControl[] {
         args.forEach((a, i) => {
           params[`arg${i}`] = a;
         });
-        out.push({ leaveId, kind: "onclick", action: fn, params });
+        const control: LeaveCancelControl = { leaveId, kind: "onclick", action: fn, params };
+        // requestDataListUpdate(this) buttons carry their whole request in
+        // data-* attributes — capture them so the confirm path replays the
+        // page's own POST instead of guessing it.
+        if (fn === "requestDataListUpdate") {
+          const rawParams = $el.attr("data-parameters") ?? "";
+          control.data = {
+            controlName: $el.attr("data-controlname") ?? "",
+            urlText: $el.attr("data-urltext") ?? "",
+            parameters: [...rawParams.matchAll(/['"]([^'"]+)['"]/g)].map((m) => m[1]),
+            rowNumber: $el.attr("data-rownumber") ?? "",
+            formName: $el.attr("data-formname") ?? null,
+          };
+        }
+        out.push(control);
       }
     }
   }

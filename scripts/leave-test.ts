@@ -15,6 +15,7 @@ import {
 } from "../src/services/constants.js";
 import {
   VISITING_PLACE_MAX,
+  buildLeaveWithdrawBody,
   durationDaysInclusive,
   examClockToMinutes,
   findClassOverlaps,
@@ -604,6 +605,48 @@ check("an early return that ends before an exam leaves it clear", () => {
     const tok = issuePreviewToken(req, PREVIEW_OWNER);
     assert.equal(verifyPreviewToken(req, tok, "test-owner-b").ok, false);
     assert.equal(verifyPreviewToken(req, tok, PREVIEW_OWNER).ok, true);
+  });
+
+  check("withdraw body mirrors the page TABLE branch byte for byte", () => {
+    const { endpoint, body } = buildLeaveWithdrawBody({
+      controlName: "cancelButton",
+      urlText: "hostels/student/leave/5",
+      rowParams: { leaveId: "L9000001" },
+      cancelButtonValue: null,
+      formName: null,
+    });
+    assert.equal(endpoint, "hostels/student/leave/5");
+    assert.equal(body.cancelButton, "undefined", "missing #cancelButton concats to 'undefined' like jQuery");
+    assert.equal(body.form, "undefined", "missing data-formname concats to 'undefined' like the page");
+    assert.equal(body.control, "cancelButton");
+    assert.equal(body.leaveId, "L9000001");
+    assert.ok(body.x, "timestamp rides along");
+  });
+  check("withdraw body honours a present #cancelButton and formname", () => {
+    const { body } = buildLeaveWithdrawBody({
+      controlName: "cancelButton",
+      urlText: "hostels/student/leave/5",
+      rowParams: { leaveId: "L9000001" },
+      cancelButtonValue: "Cancel",
+      formName: "LeaveStatusForm",
+    });
+    assert.equal(body.cancelButton, "Cancel");
+    assert.equal(body.form, "LeaveStatusForm");
+  });
+  check("withdraw body refuses missing wiring, off-module targets and empty rows", () => {
+    const base = {
+      controlName: "cancelButton",
+      urlText: "hostels/student/leave/5",
+      rowParams: { leaveId: "L9000001" },
+      cancelButtonValue: null,
+      formName: null,
+    };
+    assert.throws(() => buildLeaveWithdrawBody({ ...base, controlName: "" }), /wiring/);
+    assert.throws(
+      () => buildLeaveWithdrawBody({ ...base, urlText: "examinations/something" }),
+      /outside the leave module/,
+    );
+    assert.throws(() => buildLeaveWithdrawBody({ ...base, rowParams: {} }), /no leave reference/);
   });
 }
 

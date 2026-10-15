@@ -6,6 +6,10 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Script-call withdraw.** cancel_leave now executes requestDataListUpdate
+  Cancel buttons (POST hostels/student/leave/5, TABLE branch replayed byte
+  for byte) instead of refusing them as non-links. Anything else unrecognised
+  still refuses loud.
 - **Profile photo.** get_profile also returns the avatar as a saved file
   (`photoFile`, magic-sniffed since VTOP serves JPEG bytes as image/png). A
   missing image degrades to null plus a note — the text fields never fail for

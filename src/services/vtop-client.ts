@@ -23,6 +23,7 @@ import {
 } from "./vtop-parser.js";
 import type { CalendarDay } from "./attendance-calc.js";
 import { pMap } from "./concurrency.js";
+import { buildLeaveWithdrawBody } from "./leave.js";
 
 const DEFAULT_BASE_URL = "https://vtop.vitbhopal.ac.in/vtop";
 
@@ -838,7 +839,8 @@ export class VtopClient {
    */
   async cancelLeaveApplication(leaveId: string): Promise<string> {
     const wanted = leaveId.trim().toUpperCase();
-    const controls = parseLeaveCancelControls(await this.getLeaveStatusHtml());
+    const statusHtml = await this.getLeaveStatusHtml();
+    const controls = parseLeaveCancelControls(statusHtml);
     const ctl = controls.find((c) => c.leaveId.toUpperCase() === wanted);
     if (!ctl) {
       throw new VtopError(
@@ -849,11 +851,7 @@ export class VtopClient {
       );
     }
     if (ctl.kind !== "href") {
-      throw new VtopError(
-        "UPSTREAM",
-        `Withdraw control for leave ${leaveId.trim()} is a script call (${ctl.action || "unknown"}), not a link.`,
-        `Args seen: ${JSON.stringify(ctl.params)}. Report this shape so the control can be wired without guessing.`,
-      );
+      return this.submitLeaveWithdraw(statusHtml, ctl, leaveId.trim());
     }
     const url = new URL(ctl.action || ENDPOINTS.leaveStatus, `${this.baseUrl}/`);
     for (const [k, v] of Object.entries(ctl.params)) url.searchParams.append(k, v);
@@ -862,6 +860,54 @@ export class VtopClient {
       : url.pathname;
     const res = await this.dataClient().get(path + url.search);
     return res.data as string;
+  }
+
+  /**
+   * Withdraw via a requestDataListUpdate Cancel button (the TABLE branch of
+   * the status page's own JS). Row values are read from the live status HTML
+   * — hidden #leaveId{row} and #cancelButton when present — so the POST
+   * carries exactly what the browser would send for this row. Anything
+   * unrecognised throws before posting: a half-right withdraw is worse than
+   * none, because VTOP answers failures as HTTP 200.
+   */
+  private async submitLeaveWithdraw(
+    statusHtml: string,
+    ctl: { leaveId: string; action: string; data?: { controlName: string; urlText: string; parameters: string[]; rowNumber: string; formName: string | null } },
+    leaveId: string,
+  ): Promise<string> {
+    if (ctl.action !== "requestDataListUpdate" || !ctl.data) {
+      throw new VtopError(
+        "UPSTREAM",
+        `Withdraw control for leave ${leaveId} is a script call (${ctl.action || "unknown"}), not a link.`,
+        "Only the page's requestDataListUpdate Cancel button is wired. Report this shape so it can be added without guessing.",
+      );
+    }
+    const cheerio = await import("cheerio");
+    const $ = cheerio.load(statusHtml);
+    const val = (selector: string): string | null => {
+      const v = $(selector).attr("value");
+      return v === undefined ? null : v;
+    };
+    const rowParams: Record<string, string> = {};
+    for (const name of ctl.data.parameters) {
+      const v = val(`#${name}${ctl.data.rowNumber}`);
+      if (v === null) {
+        throw new VtopError(
+          "UPSTREAM",
+          `Withdraw row for leave ${leaveId} has no #${name}${ctl.data.rowNumber} field.`,
+          "The status layout changed. Refusing to post a withdraw with no leave reference.",
+        );
+      }
+      rowParams[name] = v;
+    }
+    const { endpoint, body } = buildLeaveWithdrawBody({
+      controlName: ctl.data.controlName,
+      urlText: ctl.data.urlText,
+      rowParams,
+      cancelButtonValue: ctl.data.controlName ? val(`#${ctl.data.controlName}`) : null,
+      formName: ctl.data.formName,
+    });
+    return this.postWithAuth(endpoint, body);
   }
 
   /**
