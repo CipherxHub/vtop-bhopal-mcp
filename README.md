@@ -5,6 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 ![Node 20.6+](https://img.shields.io/badge/node-%E2%89%A520.6-brightgreen)
 ![MCP](https://img.shields.io/badge/MCP-stdio-purple)
+[![vtop-bhopal-mcp MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/CipherxHub/vtop-bhopal-mcp/badges/score.svg)](https://glama.ai/mcp/servers/CipherxHub/vtop-bhopal-mcp)
 
 An [MCP](https://modelcontextprotocol.io) server. Connect it to OpenCode, Claude Code, Claude Desktop, Cursor or anything else that speaks MCP, then just ask. It signs in to VTOP, reads the page, and answers.
 
