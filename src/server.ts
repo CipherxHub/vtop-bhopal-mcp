@@ -33,7 +33,7 @@ export function createServer(
 } {
   const server = new McpServer({
     name: "vtop-mcp",
-    version: "0.1.6",
+    version: "0.1.7",
   });
 
   // In multi-user HTTP mode the caller passes a client shared across all of a

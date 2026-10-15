@@ -1,7 +1,7 @@
 {
   "name": "vtop-bhopal-mcp",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "MCP server for VIT Bhopal's VTOP student portal: attendance, marks, timetable, exams, grades, calendar and bunk/OD calculators from Claude Code, Claude Desktop, Cursor and other MCP clients.",
   "type": "module",
   "main": "dist/index.js",

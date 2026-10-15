@@ -1102,6 +1102,18 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
   }
 
   /**
+   * Student profile photo bytes. GET users/image/?id={regNo} — the avatar on
+   * every logged-in page. The `id` is the session's own authorizedID (the
+   * registration number), never a caller-supplied value.
+   */
+  async downloadProfilePicture(): Promise<{ bytes: Buffer; contentType: string }> {
+    return this.downloadBytes(ENDPOINTS.profilePicture, {
+      id: this.authorizedID!,
+      x: new Date().toUTCString(),
+    });
+  }
+
+  /**
    * Per-course syllabus PDF bytes. GET courseSyllabusDownload1/{CODE} — the
    * URL the page's vtopDownload() opens. Callers must verify the %PDF header:
    * VTOP answers failures as HTTP 200 HTML, and downloadBytes only rejects

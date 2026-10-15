@@ -14,7 +14,7 @@ import path from "node:path";
 
 const DEFAULT_DIR = path.join(tmpdir(), "vtop-mcp-downloads");
 
-/** Keep the newest N downloads so the directory cannot grow without bound. */
+/** Keep the newest N downloads per file kind so the directory cannot grow without bound. */
 const KEEP = 20;
 
 export function downloadDir(): string {
@@ -33,21 +33,22 @@ export function saveDownloadFile(
   bytes: Buffer,
 ): string | null {
   const safe = baseName.replace(/[^A-Za-z0-9-_]+/g, "-").slice(0, 80) || "download";
-  const file = path.join(downloadDir(), `${safe}.${ext.replace(/^\./, "")}`);
+  const extNoDot = ext.replace(/^\./, "");
+  const file = path.join(downloadDir(), `${safe}.${extNoDot}`);
   try {
     mkdirSync(downloadDir(), { recursive: true });
     writeFileSync(file, bytes);
-    pruneOldDownloads(downloadDir());
+    pruneOldDownloads(downloadDir(), extNoDot);
     return file;
   } catch {
     return null;
   }
 }
 
-function pruneOldDownloads(dir: string): void {
+function pruneOldDownloads(dir: string, ext: string): void {
   try {
     const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".pdf"))
+      .filter((f) => f.endsWith(`.${ext}`))
       .sort();
     for (const f of files.slice(0, Math.max(0, files.length - KEEP))) {
       try {

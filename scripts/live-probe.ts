@@ -190,6 +190,29 @@ async function main(): Promise<void> {
   if (isPdf) {
     console.log(`syllabus saved: ${out("probe-syllabus.pdf", bytes)}`);
   }
+
+  // 3. profile photo: the logged-in pages render the avatar from
+  // users/image/?id=<regNo>. Confirm it answers image bytes, not HTML.
+  const regNo: string = (client as unknown as { authorizedID?: string }).authorizedID ?? "";
+  if (!regNo) {
+    console.log("photo: no authorizedID on the client — skipping.");
+    return;
+  }
+  try {
+    const photo = await client.downloadBytes("users/image/", {
+      id: regNo,
+      x: new Date().toUTCString(),
+    });
+    const head = photo.bytes.subarray(0, 4);
+    const isJpeg = head[0] === 0xff && head[1] === 0xd8;
+    const isPng = head[0] === 0x89 && head[1] === 0x50;
+    console.log(`photo: contentType=${photo.contentType} bytes=${photo.bytes.length} jpeg=${isJpeg} png=${isPng}`);
+    if (isJpeg || isPng) {
+      console.log(`photo saved: ${out("probe-photo.jpg", Buffer.from(photo.bytes))}`);
+    }
+  } catch (err) {
+    console.log(`photo: threw ${(err as Error).message.slice(0, 160)}`);
+  }
 }
 
 main().catch((err) => {

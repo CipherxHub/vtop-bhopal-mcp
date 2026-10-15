@@ -25,6 +25,7 @@ Everything here is covered by offline fixtures in `scripts/fixtures.ts` and
 | Calendar | `academics/common/CalendarPreview` → `getListForSemester` | Semester select fires `getDateForSemesterPreview` (`semSubId`); group select fires `getListForSemester` (`semSubId` + `classGroupId`, 9 groups, `COMB` default) |
 | Faculty search | `hrms/employeeSearchForStudent` → `hrms/EmployeeSearchForStudent` → `hrms/EmployeeSearch1ForStudent` | Search posts the name fragment as **`empId`** (not the box name `searchEmployee`); detail re-sends the row's employee id (numeric or alphanumeric) as `empId`. All three take the standard auth fields |
 | Syllabus PDF | `GET courseSyllabusDownload1/{CODE}` | Auth fields as query params (the `vtopDownload()` URL). Answers `application/pdf`; failures arrive as HTTP 200 HTML |
+| Profile photo | `GET users/image/?id={regNo}` | The avatar on every logged-in page. Answers image bytes (observed JPEG bytes served as `image/png` — sniff the magic, not the header) |
 
 ### The leave endpoints, specifically
 

@@ -6,6 +6,10 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Profile photo.** get_profile also returns the avatar as a saved file
+  (`photoFile`, magic-sniffed since VTOP serves JPEG bytes as image/png). A
+  missing image degrades to null plus a note — the text fields never fail for
+  it.
 - **Faculty directory search.** search_faculty queries Academics → Faculty
   Info by name fragment (minimum 3 letters, letters/spaces only, mirroring
   the page) and returns every match with its detail card (department, email,
