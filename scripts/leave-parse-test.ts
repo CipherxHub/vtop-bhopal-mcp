@@ -236,4 +236,27 @@ check("rows without a withdraw affordance yield no controls", () => {
   assert.deepEqual(parseLeaveCancelControls(HISTORY_HTML), []);
 });
 
+check("requestDataListUpdate Cancel buttons expose their data wiring", () => {
+  // Shape as VTOP renders it: the header opens with two blank cells (hidden
+  // id column, action column), each row with a hidden leaveId{row} input and
+  // a data-driven Cancel button.
+  const html = `<table>
+    <tr><th style="display:none;"></th><th></th><th>Leave Id</th><th>Status</th><th>Action</th></tr>
+    <tr><td style="display:none;"><input type="hidden" id="leaveId0" name="leaveId0" value="L9000001"></td>
+      <td><input type="button" data-controlname="cancelButton" data-urltext="hostels/student/leave/5" data-effectdivision="LeaveStatus" data-parameters="['leaveId']" data-rownumber="0" onclick="requestDataListUpdate(this)" value=" Cancel "></td>
+      <td>L9000001</td><td>PROCTOR APPROVAL PENDING</td><td></td></tr>
+  </table>`;
+  const ctrls = parseLeaveCancelControls(html);
+  assert.equal(ctrls.length, 1);
+  assert.equal(ctrls[0].kind, "onclick");
+  assert.equal(ctrls[0].action, "requestDataListUpdate");
+  assert.deepEqual(ctrls[0].data, {
+    controlName: "cancelButton",
+    urlText: "hostels/student/leave/5",
+    parameters: ["leaveId"],
+    rowNumber: "0",
+    formName: null,
+  });
+});
+
 console.log(`\n${passed} checks passed.`);
