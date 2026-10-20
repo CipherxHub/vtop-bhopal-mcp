@@ -52,6 +52,8 @@ export const ENDPOINTS = {
   leaveForm: "hostels/student/leave/2",
   leaveSubmit: "hostels/student/leave/3",
   leaveStatus: "hostels/student/leave/4",
+  // The withdraw action the status page's own Cancel button posts to.
+  leaveWithdraw: "hostels/student/leave/5",
   // Faculty directory (Academics → Faculty Info). The page shell loads first;
   // the name search posts to the capitalised path and each row's Action
   // button posts the row's employee id to the detail path. All three take the

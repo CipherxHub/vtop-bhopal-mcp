@@ -1106,25 +1106,24 @@ export function parseLeaveCancelControls(html: string): LeaveCancelControl[] {
       ) {
         continue;
       }
-      if (href && !href.startsWith("javascript:")) {
-        const [action, qs] = href.split("?", 2);
-        const params: Record<string, string> = {};
-        if (qs) {
-          for (const [k, v] of new URLSearchParams(qs)) params[k] = v;
-        }
-        out.push({ leaveId, kind: "href", action, params });
-      } else {
-        const fn = (onclick.match(/([A-Za-z_$][\w$]*)\s*\(/) ?? [])[1] ?? "";
-        const args = [...onclick.matchAll(/['"]([^'"]*)['"]/g)].map((m) => m[1]);
-        const params: Record<string, string> = {};
-        args.forEach((a, i) => {
-          params[`arg${i}`] = a;
-        });
-        const control: LeaveCancelControl = { leaveId, kind: "onclick", action: fn, params };
-        // requestDataListUpdate(this) buttons carry their whole request in
-        // data-* attributes — capture them so the confirm path replays the
-        // page's own POST instead of guessing it.
+      // Decide by the SCRIPT first: VTOP's own Cancel button is
+      // `<a href="#" onclick="requestDataListUpdate(this)" data-…>`. Treating
+      // that "#" as a link sent the withdraw to the portal root, so the
+      // script-call path never fired.
+      const fn = (onclick.match(/([A-Za-z_$][\w$]*)\s*\(/) ?? [])[1] ?? "";
+      const isAnchorOnly =
+        href === "" || href === "#" || href.startsWith("#") || href.startsWith("javascript:");
+      if (fn === "requestDataListUpdate" || (href && !isAnchorOnly)) {
         if (fn === "requestDataListUpdate") {
+          const args = [...onclick.matchAll(/['"]([^'"]*)['"]/g)].map((m) => m[1]);
+          const params: Record<string, string> = {};
+          args.forEach((a, i) => {
+            params[`arg${i}`] = a;
+          });
+          const control: LeaveCancelControl = { leaveId, kind: "onclick", action: fn, params };
+          // requestDataListUpdate(this) buttons carry their whole request in
+          // data-* attributes — capture them so the confirm path replays the
+          // page's own POST instead of guessing it.
           const rawParams = $el.attr("data-parameters") ?? "";
           control.data = {
             controlName: $el.attr("data-controlname") ?? "",
@@ -1133,8 +1132,22 @@ export function parseLeaveCancelControls(html: string): LeaveCancelControl[] {
             rowNumber: $el.attr("data-rownumber") ?? "",
             formName: $el.attr("data-formname") ?? null,
           };
+          out.push(control);
+          continue;
         }
-        out.push(control);
+        const [action, qs] = href.split("?", 2);
+        const params: Record<string, string> = {};
+        if (qs) {
+          for (const [k, v] of new URLSearchParams(qs)) params[k] = v;
+        }
+        out.push({ leaveId, kind: "href", action, params });
+      } else {
+        const args = [...onclick.matchAll(/['"]([^'"]*)['"]/g)].map((m) => m[1]);
+        const params: Record<string, string> = {};
+        args.forEach((a, i) => {
+          params[`arg${i}`] = a;
+        });
+        out.push({ leaveId, kind: "onclick", action: fn, params });
       }
     }
   }

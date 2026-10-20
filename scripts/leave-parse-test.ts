@@ -232,6 +232,25 @@ check("onclick withdraw calls are reported, not executed or guessed", () => {
   assert.equal(ctrls[0].params.arg0, "L9000003");
 });
 
+check("an anchor-only Cancel is a script call, not a link", () => {
+  // VTOP's own button is `<a href="#" onclick="requestDataListUpdate(this)" …>`.
+  // Treating "#" as a link sent the withdraw to the portal root, so the
+  // script-call path never fired.
+  const html = `<table>
+    <tr><th>Leave Id</th><th>Status</th><th>Action</th></tr>
+    <tr><td>L9000001</td><td>REQUEST APPROVED</td>
+      <td><a href="#" onclick="requestDataListUpdate(this)" data-controlname="cancelButton"
+             data-urltext="hostels/student/leave/5" data-parameters="['leaveId']"
+             data-rownumber="0">Cancel</a></td></tr>
+  </table>`;
+  const ctrls = parseLeaveCancelControls(html);
+  assert.equal(ctrls.length, 1);
+  assert.equal(ctrls[0].kind, "onclick", "an anchor-only href must not become a link");
+  assert.equal(ctrls[0].action, "requestDataListUpdate");
+  assert.equal(ctrls[0].leaveId, "L9000001", "the control binds to its own row's leave id");
+  assert.equal(ctrls[0].data?.urlText, "hostels/student/leave/5");
+});
+
 check("rows without a withdraw affordance yield no controls", () => {
   assert.deepEqual(parseLeaveCancelControls(HISTORY_HTML), []);
 });

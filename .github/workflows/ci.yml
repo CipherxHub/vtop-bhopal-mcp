@@ -1,0 +1,29 @@
+name: CI
+
+# WHY CI EXISTS:
+# The only workflow in this repo used to be release.yml, and it ran
+# `npm run test:mcp` — the network-tolerant smoke suite — never the 350+
+# offline checks. Nothing verified a change before it was published.
+#
+# This workflow runs the full offline suite on every push and pull request.
+# The suite touches no network and needs no VTOP account, so it is safe to
+# run on every change.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      # test:all = typecheck + every offline suite + build + HTTP suite +
+      # MCP protocol smoke. The smoke suite's captcha step is network-bound
+      # and reported as WARN, so it cannot fail the build here.
+      - run: npm run test:all

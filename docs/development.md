@@ -11,11 +11,12 @@ npm run test:exam      # pass-rule arithmetic
 npm run test:leave     # leave validation, fingerprints, exam overlap
 npm run test:info      # profile/ack/proctor, baskets + pending, fees, history
 npm run test:http      # HTTP connector: auth, CORS, transport, landing page
+npm run test:download  # saved files: prune, permissions, path safety
 npm run test:privacy   # fixture hygiene guard
 npm run test:all       # everything above, then build + HTTP suite + MCP smoke test
 ```
 
-**361 offline checks.** Every suite except the `e2e` ones needs no VTOP account
+**371 offline checks.** Every suite except the `e2e` ones needs no VTOP account
 and touches no network — deliberate, so the suite is safe in CI.
 
 `npm run build` runs `tsup` only. **Run `typecheck` separately** — a build that

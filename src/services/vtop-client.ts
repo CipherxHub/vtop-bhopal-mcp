@@ -27,6 +27,9 @@ import { buildLeaveWithdrawBody } from "./leave.js";
 
 const DEFAULT_BASE_URL = "https://vtop.vitbhopal.ac.in/vtop";
 
+/** Hard ceiling on a downloaded file (syllabus PDFs are well under 5 MB). */
+const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
+
 /**
  * A serializable snapshot of an authenticated VTOP session — the cookie jar
  * (JSESSIONID etc.) plus the auth identity. Persisted (encrypted) so a fresh
@@ -858,7 +861,15 @@ export class VtopClient {
     const path = url.pathname.startsWith("/vtop/")
       ? url.pathname.slice("/vtop".length)
       : url.pathname;
-    const res = await this.dataClient().get(path + url.search);
+    // Carry the auth fields: a bare GET is answered with the login page, so
+    // a link-shaped withdraw could never authenticate.
+    const res = await this.dataClient().get(path + url.search, {
+      params: {
+        authorizedID: this.authorizedID!,
+        ...(this.csrfToken ? { _csrf: this.csrfToken } : {}),
+        x: new Date().toUTCString(),
+      },
+    });
     return res.data as string;
   }
 
@@ -899,6 +910,26 @@ export class VtopClient {
         );
       }
       rowParams[name] = v;
+    }
+    // The control was found in the row whose visible Leave Id is `ctl.leaveId`,
+    // but the POST body carries the HIDDEN #leaveId{row} value. If those two
+    // ever disagree (row numbering drift, stale render), the withdraw would
+    // hit a DIFFERENT leave than the one previewed and confirmed. Refuse.
+    const carried = Object.entries(rowParams).find(([k]) => /leaveid/i.test(k));
+    if (!carried) {
+      throw new VtopError(
+        "UPSTREAM",
+        `Withdraw row for leave ${leaveId} carries no leaveId field.`,
+        "Refusing to post a withdraw with no leave reference.",
+      );
+    }
+    if (carried[1].trim().toUpperCase() !== leaveId.trim().toUpperCase()) {
+      throw new VtopError(
+        "UPSTREAM",
+        `Withdraw row carries ${carried[0]}=${carried[1]}, but leave ${leaveId} was confirmed.`,
+        "The status page's hidden row id disagrees with the visible Leave Id column. " +
+          "Refusing to withdraw a different leave. Nothing was submitted.",
+      );
     }
     const { endpoint, body } = buildLeaveWithdrawBody({
       controlName: ctl.data.controlName,
@@ -1362,8 +1393,20 @@ async getLeaveTypeConstraints(leaveCode: string): Promise<string> {
             ...extraParams,
           },
           responseType: "arraybuffer",
+          // Cap the body: axios defaults to unlimited, so one hostile or
+          // broken response would buffer gigabytes into RAM (and then disk)
+          // in a process that serves every tenant.
+          maxContentLength: MAX_DOWNLOAD_BYTES,
+          maxBodyLength: MAX_DOWNLOAD_BYTES,
         });
         const bytes = Buffer.from(res.data);
+        if (bytes.length > MAX_DOWNLOAD_BYTES) {
+          throw new VtopError(
+            "UPSTREAM",
+            `Download exceeded the ${Math.round(MAX_DOWNLOAD_BYTES / 1024 / 1024)} MB limit.`,
+            "The portal served a larger file than expected; nothing was saved.",
+          );
+        }
         const contentType: string = String(res.headers?.["content-type"] ?? "");
         if (/html/i.test(contentType) || bytes.subarray(0, 1).toString() === "<") {
           const head = bytes.subarray(0, 2000).toString("latin1").toLowerCase();
