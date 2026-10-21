@@ -38,6 +38,10 @@ follows [Semantic Versioning](https://semver.org/).
 - **Semester bounds.** get_semester_info reports term bounds, days remaining
   and a teaching-over flag (figures final/locked); calculate_attendance takes
   toTermEnd to project to the last instructional day automatically.
+- **Attendance cross-check + missed classes.** check_attendance_totals compares
+  VTOP's own "total classes" with the sessions the timetable and calendar
+  imply (day-orders respected) and reports the difference instead of hiding
+  it; get_missed_classes lists every class you were absent.
 - **Degree completion maths.** get_cgpa_target says what the courses you have
   left must score to reach a target CGPA (maximum reachable, average needed,
   and a concrete mix); get_cgpa_impact says what a given set of grades does

@@ -344,6 +344,87 @@ export function failedCourseImpacts(
   });
 }
 
+/** One exam row, as far as the summary needs it. */
+export interface SummaryExam {
+  examType: string;
+  courseCode: string;
+  courseName: string;
+  examDate: string;
+  time: string;
+}
+
+export interface NextDeadline {
+  /** The exam types, most urgent first, that fall on that date. */
+  examTypes: string[];
+  courseCodes: string[];
+  courseNames: string[];
+  date: string;
+  /** How many days from today (0 = today). */
+  daysAway: number | null;
+}
+
+/**
+ * The next exam date worth preparing for: the earliest dated exam that has
+ * not passed. Exams VTOP published without a date are ignored here (they are
+ * reported as unknown dates by the exam tools) — an undated exam cannot be
+ * scheduled against.
+ */
+export function nextDeadline(
+  exams: SummaryExam[],
+  today: string,
+): NextDeadline | null {
+  const dated = exams
+    .map((e) => ({ e, d: normaliseIso(e.examDate) }))
+    .filter((x): x is { e: SummaryExam; d: string } => x.d !== null)
+    .filter((x) => x.d >= today)
+    .sort((a, b) => a.d.localeCompare(b.d));
+  const first = dated[0];
+  if (!first) return null;
+  const sameDay = dated.filter((x) => x.d === first.d);
+  return {
+    examTypes: [...new Set(sameDay.map((x) => x.e.examType))],
+    courseCodes: [...new Set(sameDay.map((x) => x.e.courseCode))],
+    courseNames: [...new Set(sameDay.map((x) => x.e.courseName))],
+    date: first.d,
+    daysAway: daysBetween(today, first.d),
+  };
+}
+
+/** Normalise the printed exam date ("20-OCT-2026") to ISO, or null. */
+function normaliseIso(raw: string): string | null {
+  const m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec((raw ?? "").trim());
+  if (!m) return null;
+  const months: Record<string, string> = {
+    JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
+    JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12",
+  };
+  const mo = months[m[2].toUpperCase()];
+  if (!mo) return null;
+  return `${m[3]}-${mo}-${m[1].padStart(2, "0")}`;
+}
+
+function daysBetween(fromISO: string, toISO: string): number | null {
+  const from = Date.parse(`${fromISO}T00:00:00Z`);
+  const to = Date.parse(`${toISO}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to)) return null;
+  return Math.round((to - from) / 86_400_000);
+}
+
+/** The basket with the largest credit shortfall — where the degree is stuck. */
+export function worstShortfall(
+  rows: { name: string; creditsRequired: number; creditsEarned: number; creditsRemaining: number }[],
+): { name: string; creditsRemaining: number; percentComplete: number } | null {
+  let worst: { name: string; creditsRemaining: number; percentComplete: number } | null = null;
+  for (const r of rows) {
+    if (r.creditsRemaining <= 0) continue;
+    const pct = r.creditsRequired > 0 ? (r.creditsEarned / r.creditsRequired) * 100 : 0;
+    if (!worst || r.creditsRemaining > worst.creditsRemaining) {
+      worst = { name: r.name, creditsRemaining: r.creditsRemaining, percentComplete: round2(pct) };
+    }
+  }
+  return worst;
+}
+
 export interface DeltaAnalysis {
   currentCgpa: number;
   /** CGPA if the remaining courses score as given. */

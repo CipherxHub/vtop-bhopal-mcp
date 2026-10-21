@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { checkAttendanceTotals } from "../src/services/attendance-audit.js";
-import { failedCourseImpacts } from "../src/services/cgpa-calc.js";
+import { failedCourseImpacts, nextDeadline, worstShortfall } from "../src/services/cgpa-calc.js";
 import type { CalendarDay, WeeklySchedule } from "../src/services/attendance-calc.js";
 import type { AttendanceRecord } from "../src/types/index.js";
 
@@ -126,6 +126,61 @@ check("a failed course with no credits does not break the maths", () => {
   const impacts = failedCourseImpacts(state, [{ courseCode: "X", courseName: "X", credits: 0 }], 100);
   assert.equal(impacts[0].cgpaWithoutCourse, 8);
   assert.equal(impacts[0].cgpaIfRepassedAtD, 8);
+});
+
+check("the next deadline is the earliest future exam", () => {
+  const d = nextDeadline(
+    [
+      { examType: "FAT", courseCode: "AAA", courseName: "A", examDate: "20-OCT-2026", time: "" },
+      { examType: "CAT-2", courseCode: "BBB", courseName: "B", examDate: "05-NOV-2026", time: "" },
+      { examType: "CAT-1", courseCode: "CCC", courseName: "C", examDate: "01-SEP-2026", time: "" },
+    ],
+    "2026-10-15",
+  );
+  assert.ok(d);
+  assert.equal(d.date, "2026-10-20");
+  assert.equal(d.examTypes[0], "FAT");
+  assert.equal(d.daysAway, 5);
+});
+
+check("exams with no date cannot be scheduled against", () => {
+  // VTOP prints CAT rows with an empty date once they are done.
+  const d = nextDeadline(
+    [{ examType: "CAT-1", courseCode: "CCC", courseName: "C", examDate: "", time: "" }],
+    "2026-10-15",
+  );
+  assert.equal(d, null);
+});
+
+check("several exams on the same day are reported together", () => {
+  const d = nextDeadline(
+    [
+      { examType: "FAT", courseCode: "AAA", courseName: "A", examDate: "20-OCT-2026", time: "" },
+      { examType: "CAT-2", courseCode: "BBB", courseName: "B", examDate: "20-OCT-2026", time: "" },
+    ],
+    "2026-10-15",
+  );
+  assert.equal(d?.examTypes.length, 2);
+  assert.equal(d?.courseCodes.length, 2);
+});
+
+check("the worst shortfall names the basket holding the degree up", () => {
+  const worst = worstShortfall([
+    { name: "Programme Core", creditsRequired: 87, creditsEarned: 63, creditsRemaining: 24 },
+    { name: "Projects", creditsRequired: 46, creditsEarned: 4, creditsRemaining: 42 },
+    { name: "University Core", creditsRequired: 26, creditsEarned: 26, creditsRemaining: 0 },
+  ]);
+  assert.equal(worst?.name, "Projects");
+  assert.equal(worst?.creditsRemaining, 42);
+  assert.equal(worst?.percentComplete, 8.7);
+});
+
+check("a fully-satisfied basket is not the worst shortfall", () => {
+  const worst = worstShortfall([
+    { name: "Programme Core", creditsRequired: 87, creditsEarned: 63, creditsRemaining: 24 },
+    { name: "University Core", creditsRequired: 26, creditsEarned: 26, creditsRemaining: 0 },
+  ]);
+  assert.equal(worst?.name, "Programme Core");
 });
 
 console.log(`\n${passed} checks passed.`);

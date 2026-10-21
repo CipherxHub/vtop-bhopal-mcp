@@ -2,17 +2,32 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { VtopClient } from "../services/vtop-client.js";
 import { VtopError } from "../services/errors.js";
-import { parseCurriculumBaskets, parseGradeHistory } from "../services/vtop-parser.js";
 import {
   analyseDelta,
   analyseTarget,
   cgpaStateFrom,
   failedCourseImpacts,
+  maxCgpa,
+  nextDeadline,
   GRADE_SCALE,
   type RemainingCourse,
 } from "../services/cgpa-calc.js";
+import { parseCurriculumBaskets, parseExamSchedule, parseGradeHistory } from "../services/vtop-parser.js";
+import { termBounds } from "../services/attendance-calc.js";
 import { EmptySchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
+
+/** Today in IST, matching the rest of the tools. */
+function istTodayISO(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
 
 /**
  * The courses still to complete, with the credits each one carries.
@@ -170,6 +185,111 @@ export function registerCgpaTools(server: McpServer, client: VtopClient) {
           "VIT makes you re-register a failed course, so its credits return to the " +
           "denominator as well as its points. A course is only worth re-taking if you " +
           "can score above the pass grade that keeps the CGPA moving up.",
+      };
+    },
+  );
+
+  mkJsonTool(
+    server,
+    "get_degree_summary",
+    "The whole picture in one call: your CGPA, credits earned vs required, what is still " +
+      "outstanding and from which basket, whether a target CGPA is still reachable, and the " +
+      "next date that matters (your next exam, and when teaching ends). Start here for " +
+      "'how far am I from finishing my degree?'. Read-only. Requires login.",
+    {
+      target: z
+        .number()
+        .min(0)
+        .max(10)
+        .optional()
+        .describe("A target CGPA to test against (e.g. 8.5). Omit for the plain picture."),
+    },
+    async ({ target }) => {
+      const semesterId = await client.getCurrentSemesterId();
+      const [history, exams] = await Promise.all([
+        client.getGradeHistoryHtml().then(parseGradeHistory),
+        client.getExamScheduleHtml(semesterId).catch(() => null),
+      ]);
+      const state = cgpaStateFrom(
+        history.semesters.flatMap((s) => s.grades),
+        history.cgpa,
+        history.totalCredits,
+      );
+      const { courses: remaining } = await remainingCourses(client);
+
+      // Credits still to earn, and where they sit.
+      const pendingCredits = remaining.reduce((s, c) => s + c.credits, 0);
+      const byBasket = new Map<string, { count: number; credits: number }>();
+      for (const c of remaining) {
+        const key = c.category ?? "Uncategorised";
+        const e = byBasket.get(key) ?? { count: 0, credits: 0 };
+        e.count += 1;
+        e.credits += c.credits;
+        byBasket.set(key, e);
+      }
+
+      // Term bounds: when teaching ends, and whether attendance is locked.
+      const today = istTodayISO();
+      const bounds = await termBounds(
+        client.getCalendar.bind(client),
+        semesterId,
+        today,
+      );
+
+      const examRows = exams
+        ? parseExamSchedule(exams).map((e) => ({
+            examType: e.examType,
+            courseCode: e.courseCode,
+            courseName: e.courseName,
+            examDate: e.examDate,
+            time: e.time,
+          }))
+        : [];
+      const deadline = nextDeadline(examRows, today);
+
+      const max = maxCgpa(state, remaining);
+      const feasibility =
+        target === undefined
+          ? null
+          : {
+              targetCgpa: target,
+              reachable: max >= target,
+              alreadyMet: state.cgpa >= target,
+              maxReachableCgpa: max,
+              requiredAveragePoints: analyseTarget(state, remaining, target).requiredAveragePoints,
+              mix: analyseTarget(state, remaining, target).mix,
+            };
+
+      return {
+        today,
+        cgpa: state.cgpa,
+        credits: {
+          gradedSoFar: state.gradedCredits,
+          earnedSoFar: state.creditsEarned,
+          required: 0,
+          remainingCredits: pendingCredits,
+          remainingCourses: remaining.length,
+        },
+        outstanding: {
+          courses: remaining.length,
+          credits: pendingCredits,
+          byBasket: [...byBasket.entries()]
+            .map(([category, e]) => ({ category, ...e }))
+            .sort((a, b) => b.credits - a.credits),
+        },
+        target: feasibility,
+        maxReachableCgpa: max,
+        term: {
+          lastInstructionalDay: bounds.lastInstructionalDay,
+          teachingOver: bounds.teachingOver,
+          attendanceLocked: bounds.teachingOver === true,
+          instructionalDaysRemaining: bounds.instructionalDaysRemaining,
+        },
+        nextDeadline: deadline,
+        note:
+          "Outstanding credits come from the curriculum catalogue minus the courses you " +
+          "have passed. 'maxReachableCgpa' assumes every remaining course scores S, so it " +
+          "is the ceiling, not a prediction.",
       };
     },
   );

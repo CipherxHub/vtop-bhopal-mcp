@@ -194,6 +194,15 @@ has not posted is unknown, not missed.
 
 **Args:** `semesterId?`, `refresh?`, `courseCode?`
 
+### `get_degree_summary`
+
+The whole picture in one call: your CGPA, credits earned vs required, what is
+still outstanding and from which basket, whether a target CGPA is still
+reachable, and the next date that matters (your next exam, and when teaching
+ends). Start here for "how far am I from finishing my degree?".
+
+**Args:** `target?` — a target CGPA to test (e.g. `8.5`)
+
 ### `get_failed_courses_impact`
 
 What each failed course costs, and what clearing it would buy: your CGPA now,

@@ -52,6 +52,7 @@ const EXPECTED_TOOLS = [
   "check_attendance_totals",
   "get_missed_classes",
   "get_failed_courses_impact",
+  "get_degree_summary",
   "get_cgpa_target",
   "get_cgpa_impact",
   "get_pending_subjects",
