@@ -344,6 +344,33 @@ export function failedCourseImpacts(
   });
 }
 
+/**
+ * Choose the courses that spend a credit budget.
+ *
+ * The programme catalogue lists every option (an elective basket can hold 31
+ * courses when the degree only needs 24 credits of them), so the catalogue
+ * minus what you have passed is NOT a to-do list. VTOP's own remaining-credit
+ * figure is the authority; this spends it on real courses, largest first.
+ *
+ * A course that does not fit the remaining budget is skipped rather than
+ * overshooting it.
+ */
+export function selectCoursesForBudget(
+  candidates: RemainingCourse[],
+  budgetCredits: number,
+): RemainingCourse[] {
+  const ordered = [...candidates].sort((a, b) => b.credits - a.credits);
+  const chosen: RemainingCourse[] = [];
+  let budget = budgetCredits;
+  for (const c of ordered) {
+    if (budget <= 0) break;
+    if (c.credits > budget) continue;
+    chosen.push(c);
+    budget -= c.credits;
+  }
+  return chosen;
+}
+
 /** One exam row, as far as the summary needs it. */
 export interface SummaryExam {
   examType: string;

@@ -14,6 +14,7 @@ import {
   cgpaStateFrom,
   maxCgpa,
   minCgpa,
+  selectCoursesForBudget,
   type RemainingCourse,
 } from "../src/services/cgpa-calc.js";
 
@@ -140,6 +141,47 @@ check("no remaining courses: met or unreachable, never a fake mix", () => {
   const r = analyseTarget(state, [], 8.5);
   assert.equal(r.unreachable, true);
   assert.equal(r.mix, null);
+});
+
+check("the catalogue is trimmed to the credit budget, not taken at face value", () => {
+  // The programme catalogue lists every elective option (31 courses when the
+  // degree needs 24 credits of them). Taking "catalogue minus passed" as the
+  // outstanding list overstated the remaining work 180 credits against a real
+  // 74 — and with it the maximum reachable CGPA.
+  const candidates = [
+    { courseCode: "AAA", courseName: "A", credits: 4, category: "Programme Core" },
+    { courseCode: "BBB", courseName: "B", credits: 4, category: "Programme Core" },
+    { courseCode: "CCC", courseName: "C", credits: 4, category: "Programme Core" },
+    { courseCode: "DDD", courseName: "D", credits: 4, category: "Programme Elective" },
+    { courseCode: "EEE", courseName: "E", credits: 40, category: "Project" },
+  ];
+  const chosen = selectCoursesForBudget(candidates, 12);
+  assert.equal(chosen.length, 3, "12 credits buys three 4-credit courses");
+  assert.equal(chosen.reduce((s, c) => s + c.credits, 0), 12);
+  // A course that does not fit is skipped, not overshot.
+  const mixed = selectCoursesForBudget(
+    [
+      { courseCode: "BIG", courseName: "B", credits: 40, category: "P" },
+      { courseCode: "S1", courseName: "S", credits: 4, category: "C" },
+      { courseCode: "S2", courseName: "S", credits: 4, category: "C" },
+      { courseCode: "S3", courseName: "S", credits: 4, category: "C" },
+    ],
+    12,
+  );
+  assert.equal(mixed.reduce((s, c) => s + c.credits, 0), 12);
+  assert.ok(!mixed.some((c) => c.courseCode === "BIG"), "the 40-credit course does not fit a 12-credit budget");
+});
+
+check("a budget that cannot be fully spent leaves the remainder unspent", () => {
+  const chosen = selectCoursesForBudget(
+    [
+      { courseCode: "S1", courseName: "S", credits: 4, category: "C" },
+      { courseCode: "S2", courseName: "S", credits: 4, category: "C" },
+    ],
+    12,
+  );
+  assert.equal(chosen.length, 2);
+  assert.equal(chosen.reduce((s, c) => s + c.credits, 0), 8, "8 of the 12 credits are spendable");
 });
 
 check("the delta reports the change and the range", () => {

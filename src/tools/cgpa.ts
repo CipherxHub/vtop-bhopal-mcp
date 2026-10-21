@@ -9,10 +9,11 @@ import {
   failedCourseImpacts,
   maxCgpa,
   nextDeadline,
+  selectCoursesForBudget,
   GRADE_SCALE,
   type RemainingCourse,
 } from "../services/cgpa-calc.js";
-import { parseCurriculumBaskets, parseExamSchedule, parseGradeHistory } from "../services/vtop-parser.js";
+import { parseCurriculumBaskets, parseCurriculumProgress, parseExamSchedule, parseGradeHistory } from "../services/vtop-parser.js";
 import { termBounds } from "../services/attendance-calc.js";
 import { EmptySchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
@@ -30,16 +31,29 @@ function istTodayISO(): string {
 }
 
 /**
- * The courses still to complete, with the credits each one carries.
+ * The courses still to complete, and the authoritative credit budget.
  *
- * Credits come from the curriculum basket (the catalogue), not from the
- * timetable: the catalogue is the authority on how many credits a course is
- * worth, and it lists courses the student has not taken yet.
+ * Two different things, from two different sources:
+ *
+ * - The **credit budget** is VTOP's own: the curriculum progress page says how
+ *   many credits the degree still needs (and per basket). That is the number
+ *   the CGPA maths must use.
+ * - The **course list** is the programme catalogue minus the courses already
+ *   passed. It is an upper bound, not a to-do list: elective baskets list every
+ *   option the programme offers, and the student only ever takes N of M. So the
+ *   list is trimmed to the credit budget, largest course first.
+ *
+ * Using the raw catalogue-minus-passed total would overstate the remaining
+ * work badly (a 100-course catalogue against a 74-credit remainder).
  */
 async function remainingCourses(
   client: VtopClient,
-): Promise<{ courses: RemainingCourse[]; source: string }> {
-  const baskets = parseCurriculumBaskets(await client.getCurriculumBasketsHtml());
+): Promise<{ courses: RemainingCourse[]; source: string; creditsRequired: number; creditsRemaining: number }> {
+  const [basketsHtml, historyHtml] = await Promise.all([
+    client.getCurriculumBasketsHtml(),
+    client.getGradeHistoryHtml(),
+  ]);
+  const baskets = parseCurriculumBaskets(basketsHtml);
   if (baskets.length === 0) {
     throw new VtopError(
       "UPSTREAM",
@@ -47,18 +61,34 @@ async function remainingCourses(
       "The layout may have changed; the remaining-courses list cannot be built.",
     );
   }
-  const history = parseGradeHistory(await client.getGradeHistoryHtml());
+  const history = parseGradeHistory(historyHtml);
+  const progress = parseCurriculumProgress(historyHtml);
+
   const passed = new Set(
     history.semesters
       .flatMap((s) => s.grades)
       .filter((g) => g.grade && g.grade !== "F" && g.grade !== "N")
       .map((g) => g.courseCode.toUpperCase()),
   );
-  const courses: RemainingCourse[] = [];
+
+  // VTOP's own remaining-credit figure is the authority. Fall back to the
+  // basket sums when the totals page is missing.
+  let creditsRemaining = progress.totals.creditsRemaining;
+  if (!creditsRemaining) {
+    creditsRemaining = progress.baskets.reduce(
+      (s: number, b: { creditsRemaining: number }) => s + b.creditsRemaining,
+      0,
+    );
+  }
+
+  // Candidates: catalogue courses not yet passed, largest first, with the
+  // non-graded baskets excluded (they carry no grade points).
+  const candidates: RemainingCourse[] = [];
   for (const basket of baskets) {
+    if (/non\s*-?\s*graded/i.test(basket.category)) continue;
     for (const course of basket.courses) {
       if (passed.has(course.code.toUpperCase())) continue;
-      courses.push({
+      candidates.push({
         courseCode: course.code,
         courseName: course.title,
         credits: course.credits,
@@ -66,7 +96,17 @@ async function remainingCourses(
       });
     }
   }
-  return { courses, source: "curriculum baskets minus grade-history passes" };
+
+  // Trim to the credit budget: the list is a way to spend the remaining
+  // credits, not the outstanding courses themselves.
+  const courses = selectCoursesForBudget(candidates, creditsRemaining);
+
+  return {
+    courses,
+    source: "curriculum catalogue trimmed to VTOP's remaining-credit budget",
+    creditsRequired: progress.totals.creditsRequired,
+    creditsRemaining,
+  };
 }
 
 export function registerCgpaTools(server: McpServer, client: VtopClient) {
@@ -89,10 +129,12 @@ export function registerCgpaTools(server: McpServer, client: VtopClient) {
         history.cgpa,
         history.totalCredits,
       );
-      const { courses, source } = await remainingCourses(client);
+      const { courses, source, creditsRequired, creditsRemaining } = await remainingCourses(client);
       const analysis = analyseTarget(state, courses, target);
       return {
         ...analysis,
+        creditsRequired,
+        creditsRemaining,
         remainingCourseCount: courses.length,
         remainingCourses: courses,
         courseSource: source,
@@ -215,10 +257,9 @@ export function registerCgpaTools(server: McpServer, client: VtopClient) {
         history.cgpa,
         history.totalCredits,
       );
-      const { courses: remaining } = await remainingCourses(client);
+      const { courses: remaining, creditsRequired, creditsRemaining } = await remainingCourses(client);
 
       // Credits still to earn, and where they sit.
-      const pendingCredits = remaining.reduce((s, c) => s + c.credits, 0);
       const byBasket = new Map<string, { count: number; credits: number }>();
       for (const c of remaining) {
         const key = c.category ?? "Uncategorised";
@@ -266,13 +307,13 @@ export function registerCgpaTools(server: McpServer, client: VtopClient) {
         credits: {
           gradedSoFar: state.gradedCredits,
           earnedSoFar: state.creditsEarned,
-          required: 0,
-          remainingCredits: pendingCredits,
+          required: creditsRequired,
+          remainingCredits: creditsRemaining,
           remainingCourses: remaining.length,
         },
         outstanding: {
           courses: remaining.length,
-          credits: pendingCredits,
+          credits: creditsRemaining,
           byBasket: [...byBasket.entries()]
             .map(([category, e]) => ({ category, ...e }))
             .sort((a, b) => b.credits - a.credits),
