@@ -289,7 +289,7 @@ try {
     assert.ok(sessionId, "no mcp-session-id header on initialize");
   });
 
-  await check("tools/list exposes all 37 tools with correct write hints", async () => {
+  await check("tools/list exposes all 40 tools with correct write hints", async () => {
     await fetch(`${multi.base}/mcp/${token}`, {
       method: "POST",
       headers: mcpHeaders(sessionId),
@@ -305,7 +305,7 @@ try {
       result: { tools: { name: string; annotations?: { readOnlyHint?: boolean } }[] };
     };
     const tools = body.result.tools;
-    assert.equal(tools.length, 37, `expected 37 tools, got ${tools.length}`);
+    assert.equal(tools.length, 40, `expected 40 tools, got ${tools.length}`);
 
     const nonReadOnly = tools.filter((t) => t.annotations?.readOnlyHint === false).map((t) => t.name);
     // Five, not one. apply_leave submits a real leave application and

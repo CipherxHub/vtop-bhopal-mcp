@@ -28,7 +28,7 @@ divyarthjain              divyarthjain/vtop-bhopal-mcp    Apache-2.0
         ▼
 CipherxHub               CipherxHub/vtop-bhopal-mcp      Apache-2.0
   leave tools, pass-eligibility arithmetic, error taxonomy, cache, keepalive,
-  captcha upscaling, structured errors, 388 offline checks
+  captcha upscaling, structured errors, 394 offline checks
   and all testing against the live portal
 ```
 

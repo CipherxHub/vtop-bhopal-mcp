@@ -41,7 +41,9 @@ follows [Semantic Versioning](https://semver.org/).
 - **Degree completion maths.** get_cgpa_target says what the courses you have
   left must score to reach a target CGPA (maximum reachable, average needed,
   and a concrete mix); get_cgpa_impact says what a given set of grades does
-  to the number you have now. Both are requirements, not predictions.
+  to the number you have now; get_failed_courses_impact shows what each
+  failure costs and which grade would actually help. All three are
+  requirements, not predictions.
 - **Captcha conditioning.** The captcha image is de-gridded, greyscaled,
   contrast-stretched and binarised before it is delivered, so a model reads it
   correctly instead of burning login attempts on noise.

@@ -7,6 +7,7 @@ import {
   analyseDelta,
   analyseTarget,
   cgpaStateFrom,
+  failedCourseImpacts,
   GRADE_SCALE,
   type RemainingCourse,
 } from "../services/cgpa-calc.js";
@@ -131,6 +132,44 @@ export function registerCgpaTools(server: McpServer, client: VtopClient) {
         note:
           "Only the courses you named are included in the projection; the others are still " +
           "outstanding and their grades are unknown.",
+      };
+    },
+  );
+
+  mkJsonTool(
+    server,
+    "get_failed_courses_impact",
+    "What each failed course is costing you, and what clearing it would buy. For every " +
+      "failed course it reports your CGPA now, your CGPA if that course were not on the " +
+      "record, and your CGPA if you re-register it and pass at the lowest passing grade " +
+      "(D). Note the trap: re-registering adds the credits back into the denominator, so " +
+      "clearing a backlog can LOWER your CGPA unless you pass well - the tool names the " +
+      "grade that would actually help. Read-only. Requires login.",
+    EmptySchema.shape,
+    async () => {
+      const history = parseGradeHistory(await client.getGradeHistoryHtml());
+      const state = cgpaStateFrom(
+        history.semesters.flatMap((s) => s.grades),
+        history.cgpa,
+        history.totalCredits,
+      );
+      const failed = history.semesters
+        .flatMap((s) => s.grades)
+        .filter((g) => g.grade === "F")
+        .map((g) => ({
+          courseCode: g.courseCode,
+          courseName: g.courseName,
+          credits: g.credits,
+        }));
+      return {
+        currentCgpa: state.cgpa,
+        gradedCredits: state.gradedCredits,
+        failedCount: failed.length,
+        impacts: failedCourseImpacts(state, failed, state.gradedCredits),
+        note:
+          "VIT makes you re-register a failed course, so its credits return to the " +
+          "denominator as well as its points. A course is only worth re-taking if you " +
+          "can score above the pass grade that keeps the CGPA moving up.",
       };
     },
   );

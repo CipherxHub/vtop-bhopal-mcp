@@ -177,6 +177,34 @@ scored S or all failed.
 > credits in the denominator with zero points — VIT makes you re-register it,
 > which adds those credits to the denominator again.
 
+### `check_attendance_totals`
+
+Does VTOP's own "total classes" match the sessions the timetable and academic
+calendar imply? Per course: VTOP's total, the expected number of sessions, and
+the difference. A difference is **information, not an error** — VTOP counts
+classes its own way (cancelled sessions, late starts, make-up classes).
+
+**Args:** `semesterId?`, `refresh?`
+
+### `get_missed_classes`
+
+Every class you have missed this semester: per course, the dates you were
+absent (with the slot) and the total. On-duty is not an absence; a class VTOP
+has not posted is unknown, not missed.
+
+**Args:** `semesterId?`, `refresh?`, `courseCode?`
+
+### `get_failed_courses_impact`
+
+What each failed course costs, and what clearing it would buy: your CGPA now,
+your CGPA if the course were not on the record, and your CGPA if you
+re-register it and pass at the lowest passing grade. **The trap it exposes:**
+re-registering adds the credits back into the denominator, so clearing a
+backlog can *lower* your CGPA unless you pass well — the tool names the
+lowest grade that would actually help.
+
+**Args:** none
+
 ### `get_curriculum_baskets`
 
 Programme curriculum baskets: every category (Programme Core, Programme

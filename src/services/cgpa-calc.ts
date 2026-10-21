@@ -256,6 +256,94 @@ export function analyseTarget(
   };
 }
 
+/**
+ * What each failed course costs, and what passing it would buy.
+ *
+ * VIT makes a failed course be re-registered, so passing it later ADDS its
+ * credits to the denominator again as well as its points. That is why
+ * "improve your CGPA" and "clear the backlog" pull in opposite directions,
+ * and the numbers below show both.
+ */
+export interface FailedCourseImpact {
+  courseCode: string;
+  courseName: string;
+  credits: number;
+  /** Points the course contributes now: zero. */
+  currentPoints: number;
+  /** CGPA today. */
+  currentCgpa: number;
+  /** CGPA if the course were simply not on the record (credits and points gone). */
+  cgpaWithoutCourse: number;
+  /**
+   * CGPA if the course is re-registered and passed at the lowest passing
+   * grade (D = 6). The credits come back into the denominator too, which is
+   * why this can be LOWER than the current CGPA.
+   */
+  cgpaIfRepassedAtD: number;
+  /** Points the student gains by clearing it (negative means the extra credits cost more). */
+  gainIfRepassed: number;
+  /** Pass grade that would be needed for the re-registration to improve the CGPA. */
+  passGradeThatHelps: GradeLetter | null;
+}
+
+/** A failed course in the grade history. */
+export interface FailedCourse {
+  courseCode: string;
+  courseName: string;
+  credits: number;
+}
+
+/**
+ * The cost of each failed course, and the effect of clearing it.
+ */
+export function failedCourseImpacts(
+  state: CgpaState,
+  failed: FailedCourse[],
+  existingCredits: number,
+): FailedCourseImpact[] {
+  return failed.map((f) => {
+    const without = state.gradedCredits - f.credits;
+    const pointsWithout = state.creditPoints;
+    const cgpaWithoutCourse =
+      without > 0 ? round2(pointsWithout / without) : state.cgpa;
+
+    // Re-registered and passed at D: the credits come back (denominator
+    // grows) and the points arrive.
+    const repassedCredits = state.gradedCredits + f.credits;
+    const repassedPoints = state.creditPoints + GRADE_POINTS.D * f.credits;
+    const cgpaIfRepassedAtD =
+      repassedCredits > 0 ? round2(repassedPoints / repassedCredits) : state.cgpa;
+
+    // Which grade would make re-registering actually help? The LOWEST grade
+    // that clears the bar — that is the actionable answer ("an A here
+    // improves your CGPA, a D does not"), not the best one available.
+    let passGradeThatHelps: GradeLetter | null = null;
+    const ascending = [...GRADE_SCALE].reverse(); // F .. S
+    for (const g of ascending) {
+      if (g.points < GRADE_POINTS.D) continue; // below D is not a pass
+      const pts = state.creditPoints + g.points * f.credits;
+      const cgpa = repassedCredits > 0 ? round2(pts / repassedCredits) : 0;
+      if (cgpa > state.cgpa) {
+        passGradeThatHelps = g.grade;
+        break;
+      }
+    }
+
+    return {
+      courseCode: f.courseCode,
+      courseName: f.courseName,
+      credits: f.credits,
+      currentPoints: 0,
+      currentCgpa: state.cgpa,
+      cgpaWithoutCourse,
+      cgpaIfRepassedAtD,
+      gainIfRepassed: round2(cgpaIfRepassedAtD - state.cgpa),
+      passGradeThatHelps,
+      ...(existingCredits ? {} : {}),
+    };
+  });
+}
+
 export interface DeltaAnalysis {
   currentCgpa: number;
   /** CGPA if the remaining courses score as given. */
