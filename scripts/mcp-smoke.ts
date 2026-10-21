@@ -49,6 +49,8 @@ const EXPECTED_TOOLS = [
   "get_acknowledgments",
   "get_proctor_details",
   "get_curriculum_baskets",
+  "get_cgpa_target",
+  "get_cgpa_impact",
   "get_pending_subjects",
   "get_fee_receipts",
   "search_faculty",

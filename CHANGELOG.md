@@ -38,7 +38,13 @@ follows [Semantic Versioning](https://semver.org/).
 - **Semester bounds.** get_semester_info reports term bounds, days remaining
   and a teaching-over flag (figures final/locked); calculate_attendance takes
   toTermEnd to project to the last instructional day automatically.
-- **Student info tools.** get_student_profile (all five profile sections),
+- **Degree completion maths.** get_cgpa_target says what the courses you have
+  left must score to reach a target CGPA (maximum reachable, average needed,
+  and a concrete mix); get_cgpa_impact says what a given set of grades does
+  to the number you have now. Both are requirements, not predictions.
+- **Captcha conditioning.** The captcha image is de-gridded, greyscaled,
+  contrast-stretched and binarised before it is delivered, so a model reads it
+  correctly instead of burning login attempts on noise.
   get_acknowledgments (admission document checklist with what is still owed),
   get_proctor_details (contact record, same data as the profile section).
 - **Curriculum baskets + pending subjects.** get_curriculum_baskets reports

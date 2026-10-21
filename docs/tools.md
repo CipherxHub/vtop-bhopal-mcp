@@ -150,6 +150,33 @@ and basket.
 
 **Args:** none
 
+### `get_cgpa_target`
+
+What the courses you have **left** must score to reach a target CGPA. Pass a
+target (e.g. `8.5`) and it reports: your CGPA now, the target, the **maximum**
+CGPA reachable if everything scores S, the CGPA if everything fails, the
+average grade points needed, and a **concrete mix** (e.g. "2 S and 2 A") that
+lands you on the target. If the target is out of reach it says so instead of
+pretending.
+
+**Args:** `target` — 0–10
+
+### `get_cgpa_impact`
+
+What a specific set of grades does to your CGPA. Pass `courseCode → grade` for
+the courses you have left (`{"CSD3002": "A"}`) and it reports your CGPA now,
+the CGPA if those grades land, the **difference**, and the range if they all
+scored S or all failed.
+
+**Args:** `grades` — course code → grade letter (`S`,`A`,`B`,`C`,`D`,`E`,`F`)
+
+> Both tools are **requirements, not predictions**: they say what the remaining
+> courses would have to score, never what you will score. VIT's scale is
+> `S=10 A=9 B=8 C=7 D=6 E=5 F=0`; `P` (non-credit) courses carry no points
+> and do not enter the denominator, and a course you **failed** keeps its
+> credits in the denominator with zero points — VIT makes you re-register it,
+> which adds those credits to the denominator again.
+
 ### `get_curriculum_baskets`
 
 Programme curriculum baskets: every category (Programme Core, Programme

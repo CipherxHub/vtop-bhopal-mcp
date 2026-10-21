@@ -6,10 +6,19 @@
  * stretched and the characters are unreadable, so every login attempt burns a
  * captcha on a guess.
  *
- * Fixing it server-side is better than asking the client to cope: upscale the
- * same image so it survives rendering, with no change to the pixels' meaning.
- * The captcha is still the one this client fetched and must submit — upscaling
- * does not create a second session or invalidate anything.
+ * Fixing it server-side is better than asking the client to cope: condition
+ * and upscale the same image so it survives rendering, with no change to the
+ * pixels' meaning. The captcha is still the one this client fetched and
+ * must submit — conditioning does not create a second session or invalidate
+ * anything.
+ *
+ * Conditioning matters as much as size. VTOP's captcha is dark red text on
+ * a light background, crossed by faint grid lines and speckle noise. A plain
+ * nearest-neighbour upscale (what this did before) magnified the noise along
+ * with the glyphs, and a vision model then misread the characters often
+ * enough to burn three login attempts. Removing the grid, flattening the
+ * colour, stretching the contrast and binarising leaves clean black-on-white
+ * glyphs that read correctly first time.
  *
  * Falls back to the original image if sharp is unavailable or fails, so this
  * can never be the reason a login fails.
@@ -35,6 +44,11 @@ interface SharpMeta {
 interface SharpChain {
   metadata(): Promise<SharpMeta>;
   resize(width: number, height: number, opts?: { kernel?: string }): SharpChain;
+  median(size: number): SharpChain;
+  greyscale(): SharpChain;
+  normalize(): SharpChain;
+  threshold(level: number): SharpChain;
+  sharpen(): SharpChain;
   jpeg(opts?: { quality?: number }): SharpChain;
   toBuffer(): Promise<Buffer>;
 }
@@ -89,11 +103,21 @@ export async function upscaleCaptcha(dataUrl: string): Promise<string> {
     if (!meta.width || !meta.height) return dataUrl;
 
     const out = await sharp(input)
-      // nearest keeps the thin, anti-aliased strokes crisp; a smooth kernel
-      // blurs exactly the detail that distinguishes e.g. 8 from B.
+      // Median filter: drops the grid lines and speckle without thinning the
+      // character strokes the way an edge-preserving blur would.
+      .median(3)
+      // Colour carries no information here; the ink is one colour.
+      .greyscale()
+      // Stretch to full range so the threshold below has a clean cut.
+      .normalize()
+      // Binarise: the text is solid, everything else is background.
+      .threshold(140)
+      // Lanczos after binarisation smooths the staircase edges the threshold
+      // leaves behind; nearest would keep them jagged.
       .resize(meta.width * factor, meta.height * factor, {
-        kernel: "nearest",
+        kernel: "lanczos3",
       })
+      .sharpen()
       .jpeg({ quality: 95 })
       .toBuffer();
 
