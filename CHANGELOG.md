@@ -42,7 +42,9 @@ follows [Semantic Versioning](https://semver.org/).
   VTOP's own "total classes" with the sessions the timetable and calendar
   imply (day-orders respected) and reports the difference instead of hiding
   it; get_missed_classes lists every class you were absent.
-- **Degree completion maths.** get_cgpa_target says what the courses you have
+- **Degree completion maths.** get_degree_summary gives the whole picture in
+  one call (CGPA, credits left, per-basket backlog, target feasibility, next
+  deadline). get_cgpa_target says what the courses you have
   left must score to reach a target CGPA (maximum reachable, average needed,
   and a concrete mix); get_cgpa_impact says what a given set of grades does
   to the number you have now; get_failed_courses_impact shows what each
