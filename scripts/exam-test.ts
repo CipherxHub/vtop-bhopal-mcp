@@ -273,12 +273,10 @@ check("CATs under 20 owe their shortfall but are not themselves a blocker", () =
 });
 
 check("an unattempted CAT is called out loudly but is recoverable via the TEE", () => {
-  // A CAT nobody attempted scores 0 and its 20-mark share transfers to the
-  // TEE — that is exactly what catDeficit does. It used to be reported as a
-  // hard blocker while the same payload showed rawTotalSoFar ===
-  // rawTotalRequired, i.e. "you can pass" and "you cannot" in one answer.
-  // There is no re-test for the CAT itself, so it is an advisory, not a
-  // blocker, unless the TEE requirement leaves the 100-mark paper.
+  // VIT's rule, confirmed by the maintainer: a missed CAT is a 20-mark hole
+  // like any other shortfall — the course still passes if the TEE makes the
+  // total up to 80. It used to be reported as a hard blocker while the same
+  // payload said "you can make it up in the TEE" and showed 80/80 raw.
   const r = assessCourse([cat("CAT-I", null), cat("CAT-II", 20)], 60, {
     scoredSoFar: 30,
     attendancePercent: 90,
@@ -289,6 +287,49 @@ check("an unattempted CAT is called out loudly but is recoverable via the TEE", 
   assert.deepEqual(r.blockers, [], "the TEE can absorb the missed CAT's share");
   assert.equal(r.canPass, true, "60 TEE + 20 CAT-II reaches the 80 raw bar");
   assert.equal(r.teeRequiredRaw, 60);
+  assert.equal(r.rawTotalSoFar, 80);
+  assert.equal(r.rawTotalRequired, 80);
+});
+
+check("both CATs missed still passes when the TEE makes up the total", () => {
+  // 0 + 0 + 80 = 80 raw: the bar is met, so the course passes.
+  const r = assessCourse([cat("CAT-I", null), cat("CAT-II", null)], 80, {
+    scoredSoFar: 0,
+    attendancePercent: 90,
+  });
+  assert.equal(r.teeRequiredRaw, 80);
+  assert.equal(r.rawTotalSoFar, 80);
+  assert.equal(r.canPass, true);
+  assert.equal(r.advisories.length, 2, "both misses are called out");
+});
+
+check("a missed CAT fails the course when the TEE cannot make it up", () => {
+  // 0 + 20 + 40 = 60 raw: short of 80, so the course is failed (and VIT
+  // makes the student re-register it). The TEE bar says 60 was needed.
+  const r = assessCourse([cat("CAT-I", null), cat("CAT-II", 20)], 40, {
+    scoredSoFar: 30,
+    attendancePercent: 90,
+  });
+  assert.equal(r.teeRequiredRaw, 60);
+  assert.equal(r.rawTotalSoFar, 60);
+  assert.equal(r.canPass, false);
+  assert.match(r.blockers.join(" "), /below the 60 needed/);
+});
+
+check("a CAT scored 0 is the same arithmetic as a missed one", () => {
+  // Attempted-and-zero and not-attempted are both 20-mark holes; only the
+  // reason differs, and both are recoverable in the TEE.
+  const scored = assessCourse([cat("CAT-I", 0), cat("CAT-II", 20)], 60, {
+    scoredSoFar: 30,
+    attendancePercent: 90,
+  });
+  const missed = assessCourse([cat("CAT-I", null), cat("CAT-II", 20)], 60, {
+    scoredSoFar: 30,
+    attendancePercent: 90,
+  });
+  assert.equal(scored.teeRequiredRaw, missed.teeRequiredRaw);
+  assert.equal(scored.canPass, missed.canPass);
+  assert.equal(scored.canPass, true);
 });
 
 check("a missed CAT the TEE cannot absorb IS a hard blocker", () => {

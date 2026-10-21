@@ -122,6 +122,13 @@ net shortfall in the CAT pair if the two together fall below 40. Both scales are
 always stated, and the arithmetic conserves the 80 — a figure that satisfied one
 scale would not silently fail the other.
 
+**A CAT you did not attempt is a 20-mark hole, not a separate veto.** It scores
+0, its share transfers to the TEE, and the course still passes if the TEE makes
+the total up to 80. If the total still falls short, the *course* is failed and
+VIT makes you re-register it — there is no re-test for a CAT, the TEE or the
+course. A CAT you attempted and scored 0 in is the same hole with a different
+reason.
+
 Also reports which classes or exams a proposed leave would cost you.
 
 **Args:** `semesterId?`, `refresh?`

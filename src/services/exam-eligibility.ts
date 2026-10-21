@@ -39,6 +39,12 @@
  * There is NO RE-TEST for CAT-I, CAT-II or the TEE. A shortfall is permanent;
  * it can only ever be made up in the FAT.
  *
+ * A MISSED CAT is therefore a 20-mark hole like any other shortfall, not a
+ * separate veto: the course still passes if the TEE makes the total up to 80.
+ * If it does not, the COURSE is failed and VIT makes you re-register it —
+ * that is the consequence, not an automatic fail the moment a CAT is missed.
+ * (Confirmed against VIT's rule by the maintainer.)
+ *
  * Attendance: >= 75.0% to sit CAT-I, CAT-II AND the TEE (exactly 75.0%
  * qualifies). Attendance is also worth 5 marks inside CAM under an
  * all-or-nothing rule, so falling below 75% costs those marks too.

@@ -42,6 +42,11 @@ follows [Semantic Versioning](https://semver.org/).
   VTOP's own "total classes" with the sessions the timetable and calendar
   imply (day-orders respected) and reports the difference instead of hiding
   it; get_missed_classes lists every class you were absent.
+- **Pass rules.** A CAT you did not attempt is a 20-mark hole, not a separate
+  veto: it scores 0, its share transfers to the TEE, and the course still
+  passes if the TEE makes the total up to 80 (VIT's rule, confirmed). If the
+  total still falls short, the course is failed and VIT makes you re-register
+  it — there is no re-test for a CAT, the TEE or the course.
 - **Degree completion maths.** get_degree_summary gives the whole picture in
   one call (CGPA, credits left, per-basket backlog, target feasibility, next
   deadline). get_cgpa_target says what the courses you have
@@ -53,6 +58,7 @@ follows [Semantic Versioning](https://semver.org/).
 - **Captcha conditioning.** The captcha image is de-gridded, greyscaled,
   contrast-stretched and binarised before it is delivered, so a model reads it
   correctly instead of burning login attempts on noise.
+- **Student info tools.** get_student_profile (all five profile sections),
   get_acknowledgments (admission document checklist with what is still owed),
   get_proctor_details (contact record, same data as the profile section).
 - **Curriculum baskets + pending subjects.** get_curriculum_baskets reports
