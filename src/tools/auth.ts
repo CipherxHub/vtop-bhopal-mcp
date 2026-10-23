@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "../services/vtop-client.js";
 import type { Credentials } from "../types/index.js";
-import { LoginSchema, EmptySchema } from "../schemas/index.js";
+import { LoginSchema, EmptySchema, SessionStatusSchema } from "../schemas/index.js";
 import { mkJsonTool, errorResult } from "./_helpers.js";
 import { saveCaptchaFile, openCaptchaImage } from "../services/captcha-file.js";
 import { VtopError, type VtopErrorBody } from "../services/errors.js";
@@ -192,19 +192,15 @@ export function registerAuthTools(
   server.tool(
     "session_status",
     "Report the current VTOP session state: whether a session is active, the registration number, whether credentials are configured, and (with `probe: true`) whether VTOP still considers the session valid. Call this before logging in if unsure, or when a data tool returns NOT_AUTHENTICATED. Read-only — it never changes anything. Does not require login.",
-    EmptySchema.shape,
+    SessionStatusSchema.shape,
     { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-    async () => {
+    async ({ probe }) => {
       const hasEnvCredentials = !!(
         process.env.VTOP_USERNAME && process.env.VTOP_PASSWORD
       );
       const hasArgCredentials = !!(credentials?.username && credentials?.password);
 
       if (!client.isAuthenticated) {
-        const body: VtopErrorBody = new VtopError(
-          "NOT_AUTHENTICATED",
-          "No active VTOP session.",
-        ).toBody();
         const data = {
           authenticated: false,
           registrationNumber: null,
@@ -236,19 +232,21 @@ export function registerAuthTools(
         serverValidated: false,
       };
 
-      // Verify against VTOP so a server-side expiry is caught here rather than
-      // on the user's next real question.
-      const alive = await client.keepAlive();
-      data.serverValidated = true;
-      data.sessionAlive = alive;
-      if (!alive) {
-        // keepAlive() clears the local flag ONLY when VTOP actually reported
-        // expiry; on a transient network error it stays authenticated. Trust
-        // the flag, not the probe result, so a blip isn't misreported as
-        // "logged out".
-        const stillLocal = client.isAuthenticated;
-        data.authenticated = stillLocal;
-        if (!stillLocal) data.nextStep = ["get_captcha", "login"];
+      if (probe) {
+        // Verify against VTOP so a server-side expiry is caught here rather than
+        // on the user's next real question.
+        const alive = await client.keepAlive();
+        data.serverValidated = true;
+        data.sessionAlive = alive;
+        if (!alive) {
+          // keepAlive() clears the local flag ONLY when VTOP actually reported
+          // expiry; on a transient network error it stays authenticated. Trust
+          // the flag, not the probe result, so a blip isn't misreported as
+          // "logged out".
+          const stillLocal = client.isAuthenticated;
+          data.authenticated = stillLocal;
+          if (!stillLocal) data.nextStep = ["get_captcha", "login"];
+        }
       }
 
       const confirmed = data.authenticated === true;
@@ -257,7 +255,9 @@ export function registerAuthTools(
           {
             type: "text" as const,
             text: confirmed
-              ? `Logged in to VTOP as ${client.registrationNumber ?? "unknown student"}; VTOP confirmed the session is still valid.`
+              ? probe
+                ? `Logged in to VTOP as ${client.registrationNumber ?? "unknown student"}; VTOP confirmed the session is still valid.`
+                : `Logged in to VTOP as ${client.registrationNumber ?? "unknown student"} (session active in memory). Pass probe: true to verify with VTOP.`
               : "VTOP rejected the stored session — it has expired. Call get_captcha, read it, then call login again.",
           },
         ],

@@ -9,11 +9,12 @@ import {
   parseTimetableGrid,
 } from "../services/vtop-parser.js";
 import { checkAttendanceTotals, scheduleFromGrid } from "../services/attendance-audit.js";
+import { pMap } from "../services/concurrency.js";
 import { SemesterInputSchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
 
 /** How many courses' detail pages one call may fetch. */
-const DETAIL_COURSE_LIMIT = 8;
+const DETAIL_COURSE_LIMIT = 20;
 
 export function registerAttendanceAuditTools(server: McpServer, client: VtopClient) {
   mkJsonTool(
@@ -94,46 +95,42 @@ export function registerAttendanceAuditTools(server: McpServer, client: VtopClie
         byCode.set(key, list);
       }
       const limit = Math.min(targets.length, DETAIL_COURSE_LIMIT);
-      const perCourse: {
-        courseCode: string;
-        courseName: string;
-        missed: number;
-        absences: { date: string; timing: string; status: string }[];
-        onDuty: number;
-        posted: number;
-      }[] = [];
-
-      for (const rec of targets.slice(0, limit)) {
-        const key = rec.courseCode.toUpperCase();
-        const handles = byCode.get(key) ?? [];
-        const absences: { date: string; timing: string; status: string }[] = [];
-        let onDuty = 0;
-        let posted = 0;
-        for (const handle of handles) {
-          let rows: ReturnType<typeof parseAttendanceDetailRows> = [];
-          try {
-            rows = parseAttendanceDetailRows(await client.getAttendanceDetailHtml(handle.params));
-          } catch (err) {
-            if (err instanceof VtopError && err.code === "NOT_AUTHENTICATED") throw err;
-            // One unreadable detail page must not lose the other courses.
-            continue;
+      const selected = targets.slice(0, limit);
+      const perCourse = await pMap(
+        selected,
+        async (rec) => {
+          const key = rec.courseCode.toUpperCase();
+          const handles = byCode.get(key) ?? [];
+          const absences: { date: string; timing: string; status: string }[] = [];
+          let onDuty = 0;
+          let posted = 0;
+          for (const handle of handles) {
+            let rows: ReturnType<typeof parseAttendanceDetailRows> = [];
+            try {
+              rows = parseAttendanceDetailRows(await client.getAttendanceDetailHtml(handle.params));
+            } catch (err) {
+              if (err instanceof VtopError && err.code === "NOT_AUTHENTICATED") throw err;
+              // One unreadable detail page must not lose the other courses.
+              continue;
+            }
+            for (const row of rows) {
+              posted++;
+              if (row.marker === "absent") absences.push({ date: row.date, timing: row.timing, status: row.status });
+              else if (row.marker === "on-duty") onDuty++;
+            }
           }
-          for (const row of rows) {
-            posted++;
-            if (row.marker === "absent") absences.push({ date: row.date, timing: row.timing, status: row.status });
-            else if (row.marker === "on-duty") onDuty++;
-          }
-        }
-        absences.sort((a, b) => a.date.localeCompare(b.date));
-        perCourse.push({
-          courseCode: rec.courseCode,
-          courseName: rec.courseName,
-          missed: absences.length,
-          absences,
-          onDuty,
-          posted,
-        });
-      }
+          absences.sort((a, b) => a.date.localeCompare(b.date));
+          return {
+            courseCode: rec.courseCode,
+            courseName: rec.courseName,
+            missed: absences.length,
+            absences,
+            onDuty,
+            posted,
+          };
+        },
+        4,
+      );
 
       const total = perCourse.reduce((s, c) => s + c.missed, 0);
       return {

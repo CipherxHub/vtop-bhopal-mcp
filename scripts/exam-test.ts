@@ -345,6 +345,17 @@ check("a missed CAT the TEE cannot absorb IS a hard blocker", () => {
   assert.equal(r.teeRequiredRaw, 80);
 });
 
+check("a pending CAT reports pending status rather than missed", () => {
+  const r = assessCourse(
+    [{ label: "CAT-I", raw: 30 }, { label: "CAT-II", raw: null, pending: true }],
+    null,
+    { scoredSoFar: 20, attendancePercent: 85 },
+  );
+  assert.equal(r.cats[1].status, "pending");
+  assert.match(r.advisories.join(" "), /pending \/ marks unpublished/);
+  assert.equal(r.canPass, null, "still reachable / undecided");
+});
+
 check("a CAT scored 0 is an attempt, so not a blocker even though it owes 20", () => {
   const r = assessCourse([cat("CAT-I", 0), cat("CAT-II", 20)], 60, {
     scoredSoFar: 30,

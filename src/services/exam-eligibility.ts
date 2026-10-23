@@ -135,13 +135,15 @@ export function weightedMarks(raw: number, rawMax: number, weightage: number): n
 
 // --- a single CAT ----------------------------------------------------------
 
-export type CatStatus = "passed" | "failed" | "missed";
+export type CatStatus = "passed" | "failed" | "missed" | "pending";
 
 export interface CatAssessment {
   /** "CAT-I" / "CAT-II" for reporting. */
   label: string;
   /** Raw score, or null when the CAT was not attempted (no mark published). */
   raw: number | null;
+  /** True when the exam is pending or unpublished, rather than confirmed missed. */
+  pending?: boolean;
 }
 
 export interface CatVerdict {
@@ -173,7 +175,7 @@ export function assessCat(cat: CatAssessment): CatVerdict {
   if (cat.raw === null) {
     return {
       label: cat.label,
-      status: "missed",
+      status: cat.pending ? "pending" : "missed",
       raw: null,
       rawMax: CAT_MAX_RAW,
       neededRaw: CAT_PASS_RAW,
@@ -299,6 +301,13 @@ export function assessCourse(
   for (const c of verdicts) {
     if (c.status === "failed") {
       // Advisory, not a blocker: carried in `advisories` below.
+      continue;
+    }
+    if (c.status === "pending") {
+      advisoriesEarly.push(
+        `${c.label} is pending / marks unpublished. If scored >= 20, TEE base is ${FAT_BASE_RAW}/${FAT_MAX_RAW}; ` +
+          `if it scores 0, its shortfall transfers to the TEE (${teeRequiredRaw}/${FAT_MAX_RAW} needed).`,
+      );
       continue;
     }
     if (c.status === "missed") {

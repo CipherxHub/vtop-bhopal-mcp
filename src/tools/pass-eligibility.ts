@@ -91,6 +91,19 @@ export function registerPassEligibilityTool(server: McpServer, client: VtopClien
       // Fallback for a course with no dated row: its own earliest sitting is
       // unknown, so use the earliest upcoming FAT rather than the latest.
       const earliest = fatDates.slice().sort().at(0) ?? null;
+
+      const catDates = new Map<string, string>();
+      for (const e of exams) {
+        const type = /cat\s*-?\s*1\b/i.test(e.examType)
+          ? "CAT-I"
+          : /cat\s*-?\s*2\b/i.test(e.examType)
+            ? "CAT-II"
+            : null;
+        if (!type) continue;
+        const d = normaliseExamDate(e.examDate);
+        const code = (e.courseCode || "").toUpperCase();
+        if (d && code) catDates.set(`${code}:${type}`, d);
+      }
       let lastInstructionalDay: string | null = null;
       if (latest) {
         try {
@@ -154,11 +167,17 @@ export function registerPassEligibilityTool(server: McpServer, client: VtopClien
         const cat1Raw = cat1?.scored ?? midTerm?.scored ?? null;
         const cat2Raw = cat2?.scored ?? midTerm?.scored ?? null;
 
+        const cat1Date = catDates.get(`${code}:CAT-I`);
+        const cat2Date = catDates.get(`${code}:CAT-II`);
+        const termActive = classesRemain || (latest ? latest >= today : false);
+        const cat1Pending = cat1Raw === null && (cat1Date ? cat1Date >= today : termActive);
+        const cat2Pending = cat2Raw === null && (cat2Date ? cat2Date >= today : termActive);
+
         const hasCats = !!cat1 || !!cat2 || !!midTerm;
         const cats: CatAssessment[] = hasCats
           ? [
-              { label: "CAT-I", raw: cat1Raw },
-              { label: "CAT-II", raw: cat2Raw },
+              { label: "CAT-I", raw: cat1Raw, pending: cat1Pending },
+              { label: "CAT-II", raw: cat2Raw, pending: cat2Pending },
             ]
           : [];
 
@@ -291,7 +310,7 @@ export function registerPassEligibilityTool(server: McpServer, client: VtopClien
             "i.e. bankedSoFar + teeRequiredMarks. Do not tell the student they " +
             "need to score that in the TEE.",
           attendanceGate:
-            ">= 75.0% exactly to sit CAT-1, CAT-2 and the TEE. Attendance is also " +
+            ">= 75.0% on raw ratio to sit CAT-1, CAT-2 and the TEE. (Note: calculate_attendance allows bunking to strictly > 74.0% based on VTOP debarment rounding, but exam eligibility checks the unrounded >= 75.0% gate). Attendance is also " +
             "worth 5 marks inside CAM, all-or-nothing at 75%+.",
           reTest:
             "THERE IS NO RE-TEST for CAT-1, CAT-2 or the TEE, so any shortfall is " +

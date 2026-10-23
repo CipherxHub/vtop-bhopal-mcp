@@ -33,7 +33,9 @@ export function registerCalendarTool(server: McpServer, client: VtopClient) {
       let to = "2999-12-31";
       if (month) {
         from = `${month}-01`;
-        to = `${month}-31`;
+        const [y, m] = month.split("-").map(Number);
+        const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+        to = `${month}-${String(lastDay).padStart(2, "0")}`;
       }
       const days = await client.getCalendar(id, from, to, group);
 
