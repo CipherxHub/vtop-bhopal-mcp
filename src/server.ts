@@ -17,6 +17,8 @@ import { registerPassEligibilityTool } from "./tools/pass-eligibility.js";
 import { registerLeaveTools } from "./tools/leave.js";
 import { registerStudentInfoTools } from "./tools/student-info.js";
 import { registerFeesTools, registerCurriculumBasketTools } from "./tools/fees-curriculum.js";
+import { registerCgpaTools } from "./tools/cgpa.js";
+import { registerAttendanceAuditTools } from "./tools/attendance-audit.js";
 import { registerFacultyTools } from "./tools/faculty.js";
 import { registerSyllabusTools } from "./tools/syllabus.js";
 // NOTE: there is deliberately no grade predictor. Predicting a letter grade
@@ -61,6 +63,8 @@ export function createServer(
   registerStudentInfoTools(server, client);
   registerFeesTools(server, client);
   registerCurriculumBasketTools(server, client);
+  registerCgpaTools(server, client);
+  registerAttendanceAuditTools(server, client);
   registerFacultyTools(server, client);
   registerSyllabusTools(server, client);
   // Stdio gets an unpredictable process-local owner; HTTP supplies a stable

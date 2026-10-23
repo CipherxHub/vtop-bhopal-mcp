@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VtopClient } from "../services/vtop-client.js";
 import { parseProfile, parseProgrammeBranch } from "../services/vtop-parser.js";
+import { VtopError } from "../services/errors.js";
 import { saveDownloadFile } from "../services/download-file.js";
 import { EmptySchema } from "../schemas/index.js";
 import { mkJsonTool } from "./_helpers.js";
@@ -44,12 +45,19 @@ export function registerProfileTool(server: McpServer, client: VtopClient) {
         if (!ext) {
           return { ...profile, photoFile: null, photoNote: "VTOP answered the photo request without image bytes." };
         }
-        const photoFile = saveDownloadFile("profile-photo", ext, bytes);
+        // Per-student filename: one process serves many users in HTTP mode,
+        // so a constant name would let one tenant overwrite another's photo
+        // and hand back a path pointing at someone else's face.
+        const who = (client.registrationNumber ?? "unknown").replace(/[^A-Za-z0-9]/g, "");
+        const photoFile = saveDownloadFile(`profile-photo-${who}`, ext, bytes);
         if (!photoFile) {
           return { ...profile, photoFile: null, photoNote: "Photo downloaded but could not be written to disk." };
         }
         return { ...profile, photoFile, photoBytes: bytes.length };
-      } catch {
+      } catch (err) {
+        // A dead session must reach the model as its code, not as a soft
+        // "photo unavailable" note — otherwise it never re-logs in.
+        if (err instanceof VtopError && err.code === "NOT_AUTHENTICATED") throw err;
         return { ...profile, photoFile: null, photoNote: "Profile photo unavailable from VTOP." };
       }
     },

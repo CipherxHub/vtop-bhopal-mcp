@@ -37,6 +37,15 @@ export const SemesterInputSchema = z.object({
 
 export const EmptySchema = z.object({});
 
+export const SessionStatusSchema = z.object({
+  probe: z
+    .boolean()
+    .optional()
+    .describe(
+      "Verify the session against VTOP with keepAlive (slower network call). Default false.",
+    ),
+});
+
 export const CalcAttendanceSchema = z.object({
   semesterId: z
     .string()

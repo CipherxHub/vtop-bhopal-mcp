@@ -39,6 +39,12 @@
  * There is NO RE-TEST for CAT-I, CAT-II or the TEE. A shortfall is permanent;
  * it can only ever be made up in the FAT.
  *
+ * A MISSED CAT is therefore a 20-mark hole like any other shortfall, not a
+ * separate veto: the course still passes if the TEE makes the total up to 80.
+ * If it does not, the COURSE is failed and VIT makes you re-register it —
+ * that is the consequence, not an automatic fail the moment a CAT is missed.
+ * (Confirmed against VIT's rule by the maintainer.)
+ *
  * Attendance: >= 75.0% to sit CAT-I, CAT-II AND the TEE (exactly 75.0%
  * qualifies). Attendance is also worth 5 marks inside CAM under an
  * all-or-nothing rule, so falling below 75% costs those marks too.
@@ -105,6 +111,11 @@ export function requiredFatRaw(catRaws: (number | null)[]): number {
 /**
  * The same rule as a single inequality over the raw total: 80 of 200.
  * Provided so callers (and tests) can cross-check the two formulations.
+ *
+ * IMPORTANT: the TEE carries its own 40/100 floor — a CAT surplus does NOT
+ * buy a below-40 TEE. Without that clause the two formulations disagree
+ * whenever the CATs exceed 40 (CAT 30+30 with a TEE of 25 is 85 raw but
+ * below the 40-mark TEE bar), and the cross-check used to throw.
  */
 export function rawTotalPasses(
   catRaws: (number | null)[],
@@ -113,7 +124,7 @@ export function rawTotalPasses(
   if (fatRaw === null) return false;
   const total =
     catRaws.reduce<number>((s, r) => s + (r ?? 0), 0) + fatRaw;
-  return total >= RAW_PASS_TOTAL;
+  return total >= RAW_PASS_TOTAL && fatRaw >= requiredFatRaw(catRaws);
 }
 
 /** Marks a raw score contributes to the 100-point course scale. */
@@ -124,13 +135,15 @@ export function weightedMarks(raw: number, rawMax: number, weightage: number): n
 
 // --- a single CAT ----------------------------------------------------------
 
-export type CatStatus = "passed" | "failed" | "missed";
+export type CatStatus = "passed" | "failed" | "missed" | "pending";
 
 export interface CatAssessment {
   /** "CAT-I" / "CAT-II" for reporting. */
   label: string;
   /** Raw score, or null when the CAT was not attempted (no mark published). */
   raw: number | null;
+  /** True when the exam is pending or unpublished, rather than confirmed missed. */
+  pending?: boolean;
 }
 
 export interface CatVerdict {
@@ -162,7 +175,7 @@ export function assessCat(cat: CatAssessment): CatVerdict {
   if (cat.raw === null) {
     return {
       label: cat.label,
-      status: "missed",
+      status: cat.pending ? "pending" : "missed",
       raw: null,
       rawMax: CAT_MAX_RAW,
       neededRaw: CAT_PASS_RAW,
@@ -272,19 +285,38 @@ export function assessCourse(
   // A CAT below 20 is NOT a blocker on its own. The rule is a shortfall
   // transfer, not a hard per-component gate: scoring 10 moves 10 marks of
   // requirement onto the TEE, and the course still passes if the TEE makes it
-  // up to reach 80 raw overall. Only a MISSED CAT is called out separately,
-  // because it carries no mark at all and cannot be recovered (no re-test).
+  // up to reach 80 raw overall.
+  //
+  // A MISSED CAT is the same kind of hole — it scores 0 and its 20-mark
+  // share transfers to the TEE (that is exactly what catDeficit does). It is
+  // called out loudly because there is no re-test for the CAT itself, but it
+  // is only a HARD blocker when the TEE cannot absorb it: two CATs cap the
+  // TEE requirement at 80, which is inside the 100-mark paper, so a missed
+  // CAT is always recoverable in the TEE. Reporting it as a blocker while
+  // the same payload shows rawTotalSoFar === rawTotalRequired is a
+  // contradiction the student has to resolve.
   const blockers: string[] = [];
+  const advisoriesEarly: string[] = [];
+  const missedCatsBlocker = teeRequiredRaw > FAT_MAX_RAW;
   for (const c of verdicts) {
     if (c.status === "failed") {
       // Advisory, not a blocker: carried in `advisories` below.
       continue;
     }
-    if (c.status === "missed") {
-      blockers.push(
-        `${c.label} was not attempted, so it scores 0. There is no re-test; ` +
-          `its share of the shortfall can only be made up in the TEE.`,
+    if (c.status === "pending") {
+      advisoriesEarly.push(
+        `${c.label} is pending / marks unpublished. If scored >= 20, TEE base is ${FAT_BASE_RAW}/${FAT_MAX_RAW}; ` +
+          `if it scores 0, its shortfall transfers to the TEE (${teeRequiredRaw}/${FAT_MAX_RAW} needed).`,
       );
+      continue;
+    }
+    if (c.status === "missed") {
+      const text =
+        `${c.label} was not attempted, so it scores 0. There is no re-test; ` +
+        `its share of the shortfall can only be made up in the TEE ` +
+        `(${teeRequiredRaw}/${FAT_MAX_RAW} needed).`;
+      if (missedCatsBlocker) blockers.push(text);
+      else advisoriesEarly.push(text);
     }
   }
   if (fatRaw !== null && fatRaw < teeRequiredRaw) {
@@ -316,7 +348,7 @@ export function assessCourse(
     );
   }
 
-  const advisories: string[] = [];
+  const advisories: string[] = [...advisoriesEarly];
   for (const c of verdicts) {
     if (c.status === "failed") {
       const offset =
@@ -332,22 +364,25 @@ export function assessCourse(
     }
   }
 
-  // Cross-check the two equivalent formulations; they must never disagree.
+  // Cross-check the two formulations; they must never disagree.
   const byTotal =
     fatRaw === null ? null : rawTotalPasses(verdicts.map((c) => c.raw), fatRaw);
 
   let canPass: boolean | null;
   if (fatRaw === null) {
     // TEE still ahead: reachable unless something is already broken.
-    const alreadyBroken = attendanceOk === false || missedCats > 0;
+    // A missed CAT is not "broken" — its share transfers to the TEE.
+    const alreadyBroken = attendanceOk === false || missedCatsBlocker;
     canPass = alreadyBroken ? false : null;
   } else {
     const byMinimum = fatRaw >= teeRequiredRaw;
-    if (byMinimum !== byTotal) {
-      // Should be unreachable; surface it rather than silently picking one.
-      throw new Error(
-        `internal rule mismatch: fat ${fatRaw} vs required ${teeRequiredRaw} ` +
-          `disagrees with the 80-of-200 total check`,
+    if (byTotal !== null && byMinimum !== byTotal) {
+      // Invariant violation. The FAT-threshold rule is the published one, so
+      // apply it and RECORD the disagreement — never throw, because one
+      // inconsistency must not abort the whole semester's report.
+      blockers.push(
+        `Internal rule mismatch: TEE ${fatRaw} vs required ${teeRequiredRaw}. ` +
+          "The TEE-threshold rule was applied; please report this.",
       );
     }
     canPass = blockers.length === 0;
@@ -399,14 +434,39 @@ export interface AttendanceRunway {
   instructionalDays: number;
   /** Sessions of THIS course falling before the deadline. */
   upcomingClasses: number;
-  /** Classes that may be skipped and still sit the exam at >= 75%. */
+  /**
+   * Classes that may be skipped AND STILL EXIST before the deadline. Never
+   * more than `upcomingClasses` — a cushion you could spend on classes that
+   * are not on the calendar is not a plan.
+   */
   skippable: number;
-  /** Consecutive classes to attend to restore >= 75% by the deadline. */
+  /**
+   * The unclamped cushion: how many classes you could still miss if more
+   * existed. Useful when the term has ended (skippable = 0) but you want to
+   * know how much margin you actually hold.
+   */
+  standingCushion: number;
+  /**
+   * Consecutive classes to attend to restore >= 75% by the deadline.
+   * 0 when nothing is needed. null ONLY when unreachable — you cannot
+   * attend more classes than remain.
+   */
   mustAttend: number | null;
+  /** True when even attending every remaining class cannot reach the gate. */
+  mustAttendUnreachable: boolean;
   /** Attendance percentage at the deadline if every upcoming class is skipped. */
   percentIfSkipAll: number;
+  /** Attendance percentage at the deadline if every upcoming class is attended. */
+  percentIfAttendAll: number;
+  /**
+   * Conservative flag: still eligible at the deadline even if EVERY remaining
+   * class is skipped. Kept as-is (it answers "am I safe?"); the opposite
+   * reading is `eligibleAtDeadlineIfAttendAll`.
+   */
   eligibleNow: boolean;
   eligibleAtDeadline: boolean;
+  /** Still eligible at the deadline if you attend everything that remains. */
+  eligibleAtDeadlineIfAttendAll: boolean;
 }
 
 /**
@@ -420,23 +480,34 @@ export function attendanceRunway(
   const { attended, total } = current;
   const u = Math.max(0, upcomingSessions);
   const percent = total > 0 ? round2((attended / total) * 100) : 0;
+  // The gate is evaluated on the RAW ratio, not the rounded display value:
+  // 74.996% must not pass a >= 75 gate just because it prints as "75".
+  const rawPercent = total > 0 ? (attended / total) * 100 : 0;
 
   const gate = ATTENDANCE_GATE_PERCENT / 100;
 
   // Attending (u - s) of the upcoming classes:
   //   (a + u - s) / (t + u) >= gate  ->  s <= a + (1 - gate) * u - gate * t
-  const skippable = Math.max(
+  const cushion = Math.max(
     0,
     Math.floor(attended + (1 - gate) * u - gate * total + 1e-9),
   );
+  // Never offer to skip more classes than are on the calendar.
+  const skippable = Math.min(u, cushion);
 
   // Consecutive classes to attend to reach the gate by the deadline:
   //   (a + x) / (t + u) >= gate  ->  x >= gate * (t + u) - a
   const need = gate * (total + u) - attended;
-  const mustAttend = need > 0 ? Math.ceil(need - 1e-9) : 0;
+  const required = need > 0 ? Math.ceil(need - 1e-9) : 0;
+  // You cannot attend more classes than remain: null means unreachable, and
+  // mustAttendUnreachable says so explicitly.
+  const unreachable = required > u;
+  const mustAttend = unreachable ? null : required;
 
   const percentIfSkipAll =
     total + u > 0 ? round2((attended / (total + u)) * 100) : 0;
+  const percentIfAttendAll =
+    total + u > 0 ? round2(((attended + u) / (total + u)) * 100) : 0;
 
   return {
     percent,
@@ -445,10 +516,16 @@ export function attendanceRunway(
     instructionalDays: 0, // filled in by the caller from the calendar
     upcomingClasses: u,
     skippable,
-    mustAttend: mustAttend > 0 ? mustAttend : null,
+    standingCushion: cushion,
+    mustAttend,
+    mustAttendUnreachable: unreachable,
     percentIfSkipAll,
-    eligibleNow: percent >= ATTENDANCE_GATE_PERCENT,
+    percentIfAttendAll,
+    eligibleNow: rawPercent >= ATTENDANCE_GATE_PERCENT,
+    // Conservative: eligible even if every remaining class is skipped.
     eligibleAtDeadline: percentIfSkipAll >= ATTENDANCE_GATE_PERCENT,
+    // The other reading: still eligible if you attend everything that is left.
+    eligibleAtDeadlineIfAttendAll: percentIfAttendAll >= ATTENDANCE_GATE_PERCENT,
   };
 }
 

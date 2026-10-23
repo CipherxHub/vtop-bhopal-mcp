@@ -17,7 +17,10 @@
  */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { DAY_OUTING_LATEST_RETURN, LEAVE_MAX_DAYS } from "./constants.js";
+import { DAY_OUTING_LATEST_RETURN, LEAVE_MAX_DAYS, ENDPOINTS } from "./constants.js";
+
+/** The one endpoint a withdraw may be posted to. */
+const LEAVE_WITHDRAW_ENDPOINT = ENDPOINTS.leaveWithdraw;
 
 /** ISO date, e.g. 2026-10-20. */
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -88,11 +91,29 @@ export function durationDaysInclusive(
   toISO: string,
 ): number | null {
   if (!ISO_DATE.test(fromISO) || !ISO_DATE.test(toISO)) return null;
+  // A shape-valid but impossible date ("2026-02-30") must be rejected:
+  // Date.parse rolls it over silently, which produced a 1-day leave for a
+  // 3-day request.
+  if (!isRealCalendarDate(fromISO) || !isRealCalendarDate(toISO)) return null;
   const from = Date.parse(`${fromISO}T00:00:00Z`);
   const to = Date.parse(`${toISO}T00:00:00Z`);
   if (Number.isNaN(from) || Number.isNaN(to)) return null;
   const days = Math.round((to - from) / 86_400_000) + 1;
   return days >= 1 ? days : null;
+}
+
+/** True when the ISO string is a date that actually exists (no 30 Feb). */
+export function isRealCalendarDate(iso: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return (
+    dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d
+  );
 }
 
 /** Normalise a user-supplied time to HH:MM. Accepts 6:00 PM, 18.00, 1800. */
@@ -484,7 +505,11 @@ export function normaliseExamDate(raw: string): string | null {
   const month = MONTHS[m[2].toUpperCase()];
   const day = Number(m[1]);
   if (month === undefined || day < 1 || day > 31) return null;
-  return `${m[4] ?? m[3]}-${String(month + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  const iso = `${m[4] ?? m[3]}-${String(month + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  // Reject impossible dates ("31-FEB-2026"): a phantom exam date can create
+  // or hide a conflict.
+  if (!isRealCalendarDate(iso)) return null;
+  return iso;
 }
 
 /** Parse a printed clock time ("01:15 PM") to minutes since midnight. */
@@ -583,7 +608,20 @@ export function findExamOverlaps(
   const checked: ExamOverlap[] = [];
   for (const e of exams) {
     const w = parseExamWindow(e);
-    if (!w.date) continue; // CAT rows with no published date are out of scope
+    if (!w.date) {
+      // No published date: VTOP prints CAT rows like this. The exam may well
+      // fall inside the leave, so it must be reported as UNKNOWN — dropping
+      // it would let the preview say "no exams fall inside this leave".
+      checked.push({
+        exam: w,
+        verdict: "UNKNOWN",
+        gapMinutes: null,
+        explanation:
+          `${w.examType} for ${w.courseCode} has no published date, so it cannot ` +
+          "be confirmed as clear. Check the timetable and the exam schedule.",
+      });
+      continue;
+    }
     if (w.date < leave.fromDate || w.date > leave.toDate) continue;
 
     const sameDayAsStart = w.date === leave.fromDate;
@@ -625,9 +663,12 @@ export function findExamOverlaps(
         `clear by ${gap} minutes.`;
     } else if (
       (!sameDayAsStart && !sameDayAsEnd) ||
-      (sameDayAsStart && sameDayAsEnd && singleDayLeave)
+      (sameDayAsStart && sameDayAsEnd && singleDayLeave &&
+        w.startMin >= leaveFrom && w.endMin <= leaveTo)
     ) {
-      // Interior day of a multi-day leave, or a whole single day: unavoidable.
+      // Interior day of a multi-day leave, or a paper wholly inside the
+      // hours you are away: unavoidable. The wording must not claim
+      // "entirely inside" for a paper that merely overlaps.
       verdict = "CONFLICT";
       explanation =
         `${w.examType} (${hhmm(w.startMin)}-${hhmm(w.endMin)}) is entirely inside ` +
@@ -684,6 +725,12 @@ export interface OverlapResult {
    * on paper but the timetable does not.
    */
   partialDays: string[];
+  /**
+   * Days where a class carried no readable time. Those classes are counted
+   * as missed (an unknown time cannot prove they were outside the leave), but
+   * the caller should report the check as incomplete rather than exact.
+   */
+  unknownTimeDays: string[];
 }
 
 const minutesOf = (hhmm: string): number => minutesOfDay(hhmm) ?? 0;
@@ -701,6 +748,7 @@ export function findClassOverlaps(
   const missed: OverlapClass[] = [];
   const dayHasMissed = new Set<string>();
   const dayHasPartial = new Set<string>();
+  const dayHasUnknownTime = new Set<string>();
   const perCourse = new Map<string, { courseCode: string; courseName: string; missed: number }>();
 
   for (const s of sessions) {
@@ -713,8 +761,26 @@ export function findClassOverlaps(
     // days keep partial-day filtering: a class before departure or after
     // return is not missed.
     const wholeDay = !startsOnFirstDay && !endsOnLastDay;
-    const classEnd = minutesOf(s.endTime);
-    const classStart = minutesOf(s.startTime);
+    const classEnd = minutesOfDay(s.endTime);
+    const classStart = minutesOfDay(s.startTime);
+
+    // An unparseable time cannot PROVE the class falls outside the leave, so
+    // it must not be silently dropped — a missing grid START row would
+    // otherwise make a class look free when it is not. Count it as missed and
+    // flag the day, so the check is reported as incomplete rather than wrong.
+    if (classEnd === null || classStart === null) {
+      missed.push({ ...s });
+      dayHasMissed.add(s.date);
+      dayHasUnknownTime.add(s.date);
+      const unknownEntry = perCourse.get(s.courseCode) ?? {
+        courseCode: s.courseCode,
+        courseName: s.courseName,
+        missed: 0,
+      };
+      unknownEntry.missed++;
+      perCourse.set(s.courseCode, unknownEntry);
+      continue;
+    }
 
     const outsideWindow =
       startsOnFirstDay && !wholeDay && classEnd <= minutesOf(leave.fromTime);
@@ -748,6 +814,9 @@ export function findClassOverlaps(
     affectedDays: dayHasMissed.size,
     byCourse,
     partialDays: [...dayHasPartial].sort(),
+    // Days where a class had no readable time: counted as missed, but the
+    // caller should say the check was incomplete rather than exact.
+    unknownTimeDays: [...dayHasUnknownTime].sort(),
   };
 }
 
@@ -774,8 +843,7 @@ export interface LeaveWithdrawWiring {
   formName: string | null;
 }
 
-export function buildLeaveWithdrawBody(w: LeaveWithdrawWiring): {
-  endpoint: string;
+export function buildLeaveWithdrawBody(w: LeaveWithdrawWiring): {  endpoint: string;
   body: Record<string, string>;
 } {
   if (!w.controlName || !w.urlText) {
@@ -790,6 +858,19 @@ export function buildLeaveWithdrawBody(w: LeaveWithdrawWiring): {
         w.urlText +
         "' is outside the leave module. " +
         "Refusing to post somewhere the page never sends withdraws.",
+    );
+  }
+  // Exact endpoint, not a prefix: a prefix would also accept the SUBMIT
+  // endpoint (leave/3) and any path with a query appended, so a changed or
+  // tampered status page could redirect an authenticated withdraw POST
+  // somewhere it must never go.
+  if (w.urlText !== LEAVE_WITHDRAW_ENDPOINT) {
+    throw new Error(
+      "Withdraw target '" +
+        w.urlText +
+        "' is not the leave withdraw endpoint (" +
+        LEAVE_WITHDRAW_ENDPOINT +
+        "). Refusing to post a withdraw somewhere the page never sends one.",
     );
   }
   if (Object.keys(w.rowParams).length === 0) {

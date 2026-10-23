@@ -122,6 +122,13 @@ net shortfall in the CAT pair if the two together fall below 40. Both scales are
 always stated, and the arithmetic conserves the 80 — a figure that satisfied one
 scale would not silently fail the other.
 
+**A CAT you did not attempt is a 20-mark hole, not a separate veto.** It scores
+0, its share transfers to the TEE, and the course still passes if the TEE makes
+the total up to 80. If the total still falls short, the *course* is failed and
+VIT makes you re-register it — there is no re-test for a CAT, the TEE or the
+course. A CAT you attempted and scored 0 in is the same hole with a different
+reason.
+
 Also reports which classes or exams a proposed leave would cost you.
 
 **Args:** `semesterId?`, `refresh?`
@@ -147,6 +154,70 @@ month.
 
 Degree progress: credits earned against those required, broken down by category
 and basket.
+
+**Args:** none
+
+### `get_cgpa_target`
+
+What the courses you have **left** must score to reach a target CGPA. Pass a
+target (e.g. `8.5`) and it reports: your CGPA now, the target, the **maximum**
+CGPA reachable if everything scores S, the CGPA if everything fails, the
+average grade points needed, and a **concrete mix** (e.g. "2 S and 2 A") that
+lands you on the target. If the target is out of reach it says so instead of
+pretending.
+
+**Args:** `target` — 0–10
+
+### `get_cgpa_impact`
+
+What a specific set of grades does to your CGPA. Pass `courseCode → grade` for
+the courses you have left (`{"CSD3002": "A"}`) and it reports your CGPA now,
+the CGPA if those grades land, the **difference**, and the range if they all
+scored S or all failed.
+
+**Args:** `grades` — course code → grade letter (`S`,`A`,`B`,`C`,`D`,`E`,`F`)
+
+> Both tools are **requirements, not predictions**: they say what the remaining
+> courses would have to score, never what you will score. VIT's scale is
+> `S=10 A=9 B=8 C=7 D=6 E=5 F=0`; `P` (non-credit) courses carry no points
+> and do not enter the denominator, and a course you **failed** keeps its
+> credits in the denominator with zero points — VIT makes you re-register it,
+> which adds those credits to the denominator again.
+
+### `check_attendance_totals`
+
+Does VTOP's own "total classes" match the sessions the timetable and academic
+calendar imply? Per course: VTOP's total, the expected number of sessions, and
+the difference. A difference is **information, not an error** — VTOP counts
+classes its own way (cancelled sessions, late starts, make-up classes).
+
+**Args:** `semesterId?`, `refresh?`
+
+### `get_missed_classes`
+
+Every class you have missed this semester: per course, the dates you were
+absent (with the slot) and the total. On-duty is not an absence; a class VTOP
+has not posted is unknown, not missed.
+
+**Args:** `semesterId?`, `refresh?`, `courseCode?`
+
+### `get_degree_summary`
+
+The whole picture in one call: your CGPA, credits earned vs required, what is
+still outstanding and from which basket, whether a target CGPA is still
+reachable, and the next date that matters (your next exam, and when teaching
+ends). Start here for "how far am I from finishing my degree?".
+
+**Args:** `target?` — a target CGPA to test (e.g. `8.5`)
+
+### `get_failed_courses_impact`
+
+What each failed course costs, and what clearing it would buy: your CGPA now,
+your CGPA if the course were not on the record, and your CGPA if you
+re-register it and pass at the lowest passing grade. **The trap it exposes:**
+re-registering adds the credits back into the denominator, so clearing a
+backlog can *lower* your CGPA unless you pass well — the tool names the
+lowest grade that would actually help.
 
 **Args:** none
 

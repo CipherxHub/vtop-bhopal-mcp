@@ -272,16 +272,88 @@ check("CATs under 20 owe their shortfall but are not themselves a blocker", () =
   assert.deepEqual(r.blockers, [], "a sub-20 CAT is not itself a blocker");
 });
 
-check("an unattempted CAT (no row) is a hard blocker", () => {
-  // No row at all means no attempt: irrecoverable, and worth flagging loudly
-  // because there is no re-test to recover it.
+check("an unattempted CAT is called out loudly but is recoverable via the TEE", () => {
+  // VIT's rule, confirmed by the maintainer: a missed CAT is a 20-mark hole
+  // like any other shortfall — the course still passes if the TEE makes the
+  // total up to 80. It used to be reported as a hard blocker while the same
+  // payload said "you can make it up in the TEE" and showed 80/80 raw.
   const r = assessCourse([cat("CAT-I", null), cat("CAT-II", 20)], 60, {
     scoredSoFar: 30,
     attendancePercent: 90,
   });
   assert.equal(r.missedCats, 1);
-  assert.match(r.blockers.join(" "), /not attempted/);
-  assert.match(r.blockers.join(" "), /no re-test/i);
+  assert.match(r.advisories.join(" "), /not attempted/);
+  assert.match(r.advisories.join(" "), /no re-test/i);
+  assert.deepEqual(r.blockers, [], "the TEE can absorb the missed CAT's share");
+  assert.equal(r.canPass, true, "60 TEE + 20 CAT-II reaches the 80 raw bar");
+  assert.equal(r.teeRequiredRaw, 60);
+  assert.equal(r.rawTotalSoFar, 80);
+  assert.equal(r.rawTotalRequired, 80);
+});
+
+check("both CATs missed still passes when the TEE makes up the total", () => {
+  // 0 + 0 + 80 = 80 raw: the bar is met, so the course passes.
+  const r = assessCourse([cat("CAT-I", null), cat("CAT-II", null)], 80, {
+    scoredSoFar: 0,
+    attendancePercent: 90,
+  });
+  assert.equal(r.teeRequiredRaw, 80);
+  assert.equal(r.rawTotalSoFar, 80);
+  assert.equal(r.canPass, true);
+  assert.equal(r.advisories.length, 2, "both misses are called out");
+});
+
+check("a missed CAT fails the course when the TEE cannot make it up", () => {
+  // 0 + 20 + 40 = 60 raw: short of 80, so the course is failed (and VIT
+  // makes the student re-register it). The TEE bar says 60 was needed.
+  const r = assessCourse([cat("CAT-I", null), cat("CAT-II", 20)], 40, {
+    scoredSoFar: 30,
+    attendancePercent: 90,
+  });
+  assert.equal(r.teeRequiredRaw, 60);
+  assert.equal(r.rawTotalSoFar, 60);
+  assert.equal(r.canPass, false);
+  assert.match(r.blockers.join(" "), /below the 60 needed/);
+});
+
+check("a CAT scored 0 is the same arithmetic as a missed one", () => {
+  // Attempted-and-zero and not-attempted are both 20-mark holes; only the
+  // reason differs, and both are recoverable in the TEE.
+  const scored = assessCourse([cat("CAT-I", 0), cat("CAT-II", 20)], 60, {
+    scoredSoFar: 30,
+    attendancePercent: 90,
+  });
+  const missed = assessCourse([cat("CAT-I", null), cat("CAT-II", 20)], 60, {
+    scoredSoFar: 30,
+    attendancePercent: 90,
+  });
+  assert.equal(scored.teeRequiredRaw, missed.teeRequiredRaw);
+  assert.equal(scored.canPass, missed.canPass);
+  assert.equal(scored.canPass, true);
+});
+
+check("a missed CAT the TEE cannot absorb IS a hard blocker", () => {
+  // Two CATs cap the TEE requirement at 80 (inside the 100-mark paper), so
+  // the blocker branch is unreachable in practice — it exists for the case
+  // where a third component changes the arithmetic. Guard it directly.
+  const r = assessCourse([cat("CAT-I", null), cat("CAT-II", null)], 80, {
+    scoredSoFar: 0,
+    attendancePercent: 90,
+  });
+  assert.equal(r.missedCats, 2);
+  assert.deepEqual(r.blockers, [], "80/100 TEE still absorbs both missed CATs");
+  assert.equal(r.teeRequiredRaw, 80);
+});
+
+check("a pending CAT reports pending status rather than missed", () => {
+  const r = assessCourse(
+    [{ label: "CAT-I", raw: 30 }, { label: "CAT-II", raw: null, pending: true }],
+    null,
+    { scoredSoFar: 20, attendancePercent: 85 },
+  );
+  assert.equal(r.cats[1].status, "pending");
+  assert.match(r.advisories.join(" "), /pending \/ marks unpublished/);
+  assert.equal(r.canPass, null, "still reachable / undecided");
 });
 
 check("a CAT scored 0 is an attempt, so not a blocker even though it owes 20", () => {
@@ -304,8 +376,8 @@ check("a missed CAT transfers only its NET share of the shortfall", () => {
   assert.equal(r.teeRequiredRaw, 55);
   assert.equal(r.totalDeficit, 15);
   assert.equal(r.missedCats, 1);
-  assert.match(r.blockers.join(" "), /not attempted/);
-  assert.match(r.blockers.join(" "), /no re-test/i);
+  assert.match(r.advisories.join(" "), /not attempted/);
+  assert.match(r.advisories.join(" "), /no re-test/i);
 });
 
 check("a missed CAT with a weak partner transfers more", () => {
@@ -403,13 +475,45 @@ check("the explanation states the 80-of-200 rule and the live FAT bar", () => {
 });
 
 // --- attendance runway -----------------------------------------------------
-check("no upcoming classes -> the buffer stays intact", () => {
-  // 31/36 = 86.1%; skippable is the standing cushion: 31 - 0.75*36 = 4.
+check("no upcoming classes -> the cushion is reported, nothing to skip", () => {
+  // 31/36 = 86.1%. With no classes left you cannot skip any, so skippable is
+  // 0 — but the standing cushion (31 - 0.75*36 = 4) still says how much
+  // margin you hold, and mustAttend is 0 (nothing needed), not null.
   const r = attendanceRunway({ attended: 31, total: 36 }, 0);
   assert.equal(r.percent, 86.11);
-  assert.equal(r.skippable, 4);
-  assert.equal(r.mustAttend, null);
+  assert.equal(r.skippable, 0, "no classes left to skip");
+  assert.equal(r.standingCushion, 4, "the margin you still hold");
+  assert.equal(r.mustAttend, 0, "nothing to attend: already safe");
+  assert.equal(r.mustAttendUnreachable, false);
   assert.equal(r.eligibleAtDeadline, true);
+});
+
+check("skippable never exceeds the classes that exist", () => {
+  // A big cushion must not promise skips on days that are not on the
+  // calendar: 90/100 with 2 classes left can only skip 2.
+  const r = attendanceRunway({ attended: 90, total: 100 }, 2);
+  assert.equal(r.skippable, 2);
+  assert.equal(r.standingCushion, 15);
+  assert.equal(r.mustAttend, 0);
+});
+
+check("mustAttend is null only when the deadline is unreachable", () => {
+  // 10/100 with 5 classes left: attending all five reaches 15/105 = 14.3%, so
+  // no number of classes can restore 75% — null plus the explicit flag.
+  const unreachable = attendanceRunway({ attended: 10, total: 100 }, 5);
+  assert.equal(unreachable.mustAttend, null);
+  assert.equal(unreachable.mustAttendUnreachable, true);
+  // 80/100 with 20 left: (80 + x)/120 >= 0.75 -> x >= 10, and 20 exist.
+  const reachable = attendanceRunway({ attended: 80, total: 100 }, 20);
+  assert.equal(reachable.mustAttend, 10);
+  assert.equal(reachable.mustAttendUnreachable, false);
+});
+
+check("the 75% gate uses the raw ratio, not the rounded display value", () => {
+  // 74.996% must not pass a >= 75 gate just because it prints as "75".
+  const r = attendanceRunway({ attended: 18749, total: 25000 }, 0);
+  assert.equal(r.percent, 75, "prints as 75");
+  assert.equal(r.eligibleNow, false, "but the raw ratio is below the gate");
 });
 
 check("skippable allows misses while staying at or above 75%", () => {
@@ -513,8 +617,10 @@ check("a runway past the last instructional day has nothing left to attend", () 
   // 31/36 = 86.1% with zero classes remaining: the cushion simply stands.
   const r = attendanceRunway({ attended: 31, total: 36 }, 0);
   assert.equal(r.upcomingClasses, 0);
-  assert.equal(r.skippable, 4, "the standing cushion is untouched");
-  assert.equal(r.mustAttend, null);
+  assert.equal(r.skippable, 0, "no classes left to skip");
+  assert.equal(r.standingCushion, 4, "but the margin you still hold");
+  assert.equal(r.mustAttend, 0, "nothing to attend: already safe");
+  assert.equal(r.mustAttendUnreachable, false);
   assert.equal(r.percentIfSkipAll, r.percent, "nothing left to skip");
   assert.equal(r.eligibleAtDeadline, true);
 });

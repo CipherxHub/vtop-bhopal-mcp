@@ -544,13 +544,40 @@ check("an exam with no published time is UNKNOWN, never assumed clear", () => {
   assert.match(r.unknown[0].explanation, /published no time/);
 });
 
-check("exams with no published date are skipped entirely", () => {
-  // CAT1/CAT2 rows come back with an empty date once they are done.
+check("a class with no readable time is counted as missed, not skipped", () => {
+  // An empty time became 00:00, which made the class look like it ended
+  // before departure — so the preview said "no classes missed" for a class
+  // the student would actually lose.
+  const r = findClassOverlaps(
+    { fromDate: "2026-11-03", fromTime: "09:00", toDate: "2026-11-03", toTime: "18:00" },
+    [{ date: "2026-11-03", courseCode: "X1", courseName: "C", startTime: "", endTime: "", venue: "V" }],
+  );
+  assert.equal(r.missed.length, 1, "an unknown time cannot prove the class was outside the leave");
+  assert.deepEqual(r.unknownTimeDays, ["2026-11-03"], "and the day is flagged as incomplete");
+});
+
+check("an impossible exam date is rejected, not normalised", () => {
+  assert.equal(normaliseExamDate("31-FEB-2026"), null);
+  assert.equal(normaliseExamDate("30-OCT-2026"), "2026-10-30");
+});
+
+check("a leave over an impossible date has no duration", () => {
+  assert.equal(durationDaysInclusive("2026-02-30", "2026-03-02"), null);
+  assert.equal(durationDaysInclusive("2026-10-20", "2026-10-22"), 3);
+});
+
+check("exams with no published date are reported UNKNOWN, not dropped", () => {
+  // CAT1/CAT2 rows come back with an empty date once they are done. The exam
+  // may still fall inside the leave, so it must be surfaced as UNKNOWN —
+  // dropping it let the preview say "no exams fall inside this leave".
   const r = findExamOverlaps(
     { fromDate: "2026-10-30", fromTime: "17:00", toDate: "2026-11-15", toTime: "21:00" },
     [{ examType: "CAT1", courseCode: "ABC105", courseName: "X", examDate: "", time: "" }],
   );
-  assert.equal(r.checked.length, 0);
+  assert.equal(r.checked.length, 1);
+  assert.equal(r.unknown.length, 1);
+  assert.equal(r.conflicts.length, 0);
+  assert.match(r.unknown[0].explanation, /no published date/);
 });
 
 check("an early return that ends before an exam leaves it clear", () => {
@@ -647,6 +674,17 @@ check("an early return that ends before an exam leaves it clear", () => {
       /outside the leave module/,
     );
     assert.throws(() => buildLeaveWithdrawBody({ ...base, rowParams: {} }), /no leave reference/);
+    // A prefix match would also accept the SUBMIT endpoint (leave/3) and any
+    // path with a query appended — a changed page could then redirect an
+    // authenticated withdraw POST somewhere it must never go.
+    assert.throws(
+      () => buildLeaveWithdrawBody({ ...base, urlText: "hostels/student/leave/3" }),
+      /not the leave withdraw endpoint/,
+    );
+    assert.throws(
+      () => buildLeaveWithdrawBody({ ...base, urlText: "hostels/student/leave/5?x=1" }),
+      /not the leave withdraw endpoint/,
+    );
   });
 }
 
