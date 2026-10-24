@@ -6,6 +6,12 @@ follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Holiday & Day-Order Calendar Awareness.** Leave overlap checks now cross-reference
+  the academic calendar, omitting institutional holidays from missed class counts and
+  applying dynamic day-order weekday substitutions (aligned with app v2.4).
+- **Curriculum Progress Category Breakdown.** Detailed distribution types with
+  remaining degree credits per category (e.g. Programme Electives) matching
+  pending catalogue baskets.
 - **Script-call withdraw.** cancel_leave now executes requestDataListUpdate
   Cancel buttons (POST hostels/student/leave/5, TABLE branch replayed byte
   for byte) instead of refusing them as non-links. Anything else unrecognised
